@@ -196,7 +196,7 @@ export default function DoctorPatients() {
                       <span className="text-sm text-gray-500">Nhóm máu: {patient.bloodGroup}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                      {patient.chronicDiseases.map((disease, idx) => (
+                      {patient.chronicDiseases.map((disease: string, idx: number) => (
                         <span
                           key={idx}
                           className="px-2 py-0.5 bg-red-50 text-red-600 text-xs rounded-full"

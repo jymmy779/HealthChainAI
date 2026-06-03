@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { currentUser } from '@/data/mockData';
+import { useAuth } from '@/context/AuthContext';
 import Link from 'next/link';
 
 export default function ProfilePage() {
-  const user = currentUser;
+  const { profile } = useAuth();
+
+  if (!profile) return null;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-fadeIn">
@@ -13,7 +15,7 @@ export default function ProfilePage() {
       <div className="bg-white rounded-2xl p-6 lg:p-8 shadow-sm text-center">
         <div className="relative inline-block">
           <div className="w-28 h-28 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-4xl font-bold text-white mx-auto shadow-lg">
-            {user.name.charAt(0)}
+            {profile.full_name?.charAt(0) || '?'}
           </div>
           <button className="absolute bottom-1 right-1 w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-gray-50 border-2 border-white">
             <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -22,11 +24,11 @@ export default function ProfilePage() {
             </svg>
           </button>
         </div>
-        <h1 className="text-2xl font-bold text-text-primary mt-4">{user.name}</h1>
-        <p className="text-text-secondary text-base">{user.email}</p>
+        <h1 className="text-2xl font-bold text-text-primary mt-4">{profile.full_name}</h1>
+        <p className="text-text-secondary text-base">{profile.email}</p>
         <div className="flex justify-center gap-2 mt-3">
-          <span className="px-3 py-1 bg-primary-light/40 text-primary text-sm font-medium rounded-full">{user.bloodGroup}</span>
-          <span className="px-3 py-1 bg-secondary-light/40 text-secondary text-sm font-medium rounded-full">BMI: {user.bmi}</span>
+          <span className="px-3 py-1 bg-primary-light/40 text-primary text-sm font-medium rounded-full">{profile.blood_group || 'Chưa cập nhật'}</span>
+          <span className="px-3 py-1 bg-secondary-light/40 text-secondary text-sm font-medium rounded-full">BMI: {profile.weight && profile.height ? (profile.weight / Math.pow(profile.height / 100, 2)).toFixed(1) : '--'}</span>
         </div>
       </div>
 
@@ -37,28 +39,45 @@ export default function ProfilePage() {
           <Link href="/dashboard/profile/edit" className="text-primary text-sm font-semibold hover:underline">Chỉnh sửa</Link>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: 'Ngày sinh', value: user.dateOfBirth },
-            { label: 'Giới tính', value: user.gender },
-            { label: 'Chiều cao', value: user.height },
-            { label: 'Cân nặng', value: user.weight },
-            { label: 'Nhóm máu', value: user.bloodGroup },
-            { label: 'Dị ứng', value: user.allergies || 'Không có' },
-          ].map((item, i) => (
-            <div key={i} className="bg-gray-50 rounded-xl p-3.5">
-              <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">{item.label}</p>
-              <p className="text-base font-semibold text-text-primary mt-1">{item.value}</p>
-            </div>
-          ))}
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Ngày sinh</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.date_of_birth || 'Chưa cập nhật'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Số điện thoại</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.phone || 'Chưa cập nhật'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Giới tính</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.gender || 'Chưa cập nhật'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Nhóm máu</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.blood_group || 'Chưa cập nhật'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Chiều cao</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.height ? `${profile.height} cm` : 'Chưa cập nhật'}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Cân nặng</p>
+            <p className="text-base font-semibold text-text-primary mt-1">{profile.weight ? `${profile.weight} kg` : 'Chưa cập nhật'}</p>
+          </div>
+          <div className="col-span-2 bg-gray-50 rounded-xl p-3.5">
+            <p className="text-xs font-medium text-text-secondary uppercase tracking-wide">Dị ứng thuốc</p>
+            <p className="text-base font-semibold text-text-primary mt-1">
+              {profile.allergies?.length ? profile.allergies.join(', ') : 'Không có'}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Health Conditions */}
       <div className="bg-white rounded-2xl p-6 lg:p-8 shadow-sm">
         <h2 className="text-lg font-bold text-text-primary mb-4">Bệnh mãn tính đang điều trị</h2>
-        {user.chronicDiseases.length > 0 ? (
+        {profile.chronic_diseases && profile.chronic_diseases.length > 0 ? (
           <div className="space-y-3">
-            {user.chronicDiseases.map((c, i) => (
+            {profile.chronic_diseases.map((c, i) => (
               <div key={i} className="flex items-center gap-3 p-3 bg-danger-light/20 rounded-xl">
                 <div className="w-8 h-8 bg-danger-light rounded-lg flex items-center justify-center">
                   <svg className="w-4 h-4 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">

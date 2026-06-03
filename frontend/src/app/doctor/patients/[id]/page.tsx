@@ -181,7 +181,7 @@ export default function PatientDetailPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mt-3">
-              {patient.chronicDiseases.map((disease, idx) => (
+              {patient.chronicDiseases.map((disease: string, idx: number) => (
                 <span
                   key={idx}
                   className="px-3 py-1 bg-red-50 text-red-600 text-sm rounded-full font-medium"

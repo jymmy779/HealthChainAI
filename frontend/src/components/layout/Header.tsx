@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { currentUser, notifications } from '@/data/mockData';
+import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/hooks/useData';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -11,14 +12,22 @@ interface HeaderProps {
 
 export default function Header({ onToggleSidebar }: HeaderProps) {
   const router = useRouter();
-  const [showNotifications, setShowNotifications] = useState(false);
+  const { profile, signOut } = useAuth();
+  const { unreadCount } = useNotifications();
   const [showProfile, setShowProfile] = useState(false);
-  const unreadCount = notifications.filter(n => !n.isRead).length;
 
   const navigateAndClose = (path: string) => {
     setShowProfile(false);
     router.push(path);
   };
+
+  const handleSignOut = async () => {
+    setShowProfile(false);
+    await signOut();
+  };
+
+  const displayName = profile?.full_name || 'Người dùng';
+  const displayEmail = profile?.email || '';
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-border">
@@ -71,10 +80,10 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 transition-colors"
             >
               <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
-                {currentUser.name.charAt(0)}
+                {displayName.charAt(0)}
               </div>
               <span className="hidden lg:block text-sm font-medium text-text-primary max-w-[120px] truncate">
-                {currentUser.name}
+                {displayName}
               </span>
               <svg className="hidden lg:block w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -86,8 +95,8 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                 <div className="fixed inset-0" onClick={() => setShowProfile(false)} />
                 <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-border animate-fadeIn">
                   <div className="p-4 border-b border-border">
-                    <p className="font-semibold text-text-primary">{currentUser.name}</p>
-                    <p className="text-sm text-text-secondary">{currentUser.email}</p>
+                    <p className="font-semibold text-text-primary">{displayName}</p>
+                    <p className="text-sm text-text-secondary">{displayEmail}</p>
                   </div>
                   <div className="p-2">
                     {[
@@ -97,7 +106,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                       <button
                         key={i}
                         onClick={() => navigateAndClose(item.link)}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 transition-colors text-text-primary"
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-100 transition-colors text-text-primary text-left"
                       >
                         <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={item.icon} />
@@ -107,12 +116,15 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                     ))}
                   </div>
                   <div className="p-2 border-t border-border">
-                    <Link href="/auth/login" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-danger">
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-danger text-left"
+                    >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                       </svg>
                       <span className="text-sm font-medium">Đăng xuất</span>
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </>

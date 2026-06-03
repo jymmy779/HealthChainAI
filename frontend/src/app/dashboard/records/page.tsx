@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { healthRecords, healthRecordTypes } from '@/data/mockData';
+import { useHealthRecords } from '@/hooks/useData';
+import { healthRecordTypes } from '@/data/mockData'; // Giữ lại types cho filter
 import Link from 'next/link';
 
 export default function RecordsPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
-  const records = healthRecords;
+  const { data: records, loading } = useHealthRecords();
 
   const filteredRecords = records.filter(r => {
     if (filter !== 'all' && r.type !== filter) return false;
-    if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !r.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !r.name.toLowerCase().includes(search.toLowerCase()) && !(r.description || '').toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -55,7 +56,12 @@ export default function RecordsPage() {
       </div>
 
       {/* Records List */}
-      <div className="bg-white rounded-2xl shadow-sm divide-y divide-border">
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm divide-y divide-border">
         {filteredRecords.map((record) => (
           <Link key={record.id} href={`/dashboard/records/${record.id}`} className="flex items-center gap-4 p-4 hover:bg-gray-50 transition-all">
             <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${getIconBg(record.type)}`}>
@@ -67,12 +73,12 @@ export default function RecordsPage() {
               <p className="font-semibold text-text-primary truncate">{record.name}</p>
               <div className="flex items-center gap-2 mt-1">
                 <span className="text-sm text-text-secondary">{record.date}</span>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-text-secondary">{record.typeLabel}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-text-secondary">{record.type_label}</span>
               </div>
             </div>
             <div className="text-right">
               <div className="text-xs px-2 py-1 rounded-full bg-secondary-light/50 text-secondary font-medium">
-                {record.blockchainStatus === 'confirmed' ? 'Đã lưu Blockchain' : 'Đang xử lý'}
+                {record.blockchain_status === 'confirmed' ? 'Đã lưu Blockchain' : 'Đang xử lý'}
               </div>
             </div>
             <svg className="w-4 h-4 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -86,6 +92,7 @@ export default function RecordsPage() {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

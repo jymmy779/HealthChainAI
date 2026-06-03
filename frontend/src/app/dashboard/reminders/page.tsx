@@ -1,27 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-
-interface Reminder {
-  id: string;
-  title: string;
-  description: string;
-  type: string;
-  time: string;
-  date?: string;
-  note?: string;
-  isActive: boolean;
-  completed: boolean;
-}
-
-const defaultReminders: Reminder[] = [
-  { id: 'rem-001', title: 'Kiểm tra đường huyết', description: 'Đo đường huyết lúc đói vào buổi sáng', type: 'checkup', time: '07:00', isActive: true, completed: false },
-  { id: 'rem-002', title: 'Uống thuốc huyết áp', description: 'Uống thuốc theo đơn của BS. Trần Thị Mai', type: 'medication', time: '08:00', isActive: true, completed: false, note: 'Uống sau khi ăn sáng' },
-  { id: 'rem-003', title: 'Uống thuốc tiểu đường', description: 'Uống Metformin 500mg sau ăn', type: 'medication', time: '12:00', isActive: true, completed: false },
-  { id: 'rem-004', title: 'Đo huyết áp buổi tối', description: 'Đo huyết áp trước khi đi ngủ', type: 'checkup', time: '20:00', isActive: true, completed: false },
-  { id: 'rem-005', title: 'Tập thể dục nhẹ', description: 'Đi bộ 30 phút trong công viên', type: 'exercise', time: '17:00', isActive: true, completed: false },
-  { id: 'rem-006', title: 'Tái khám nội tiết', description: 'Tái khám tại Phòng khám Nội tiết Đà Nẵng', type: 'appointment', time: '08:00', date: '2026-06-15', isActive: true, completed: false },
-];
+import { useReminders } from '@/hooks/useData';
 
 const getTypeStyle = (type: string) => {
   switch (type) {
@@ -34,46 +14,56 @@ const getTypeStyle = (type: string) => {
 };
 
 export default function RemindersPage() {
-  const [reminderList, setReminderList] = useState<Reminder[]>(defaultReminders);
+  const { data: reminderList, loading, add, update, remove } = useReminders();
   const [showAddModal, setShowAddModal] = useState(false);
   const [newReminder, setNewReminder] = useState({
     title: '',
     date: '',
     time: '',
-    type: 'medication' as string,
+    type: 'medication',
     note: ''
   });
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleAddReminder = () => {
-    const newId = `rem-${Date.now()}`;
-    const reminder: Reminder = {
-      id: newId,
-      title: newReminder.title,
-      description: newReminder.note,
+  const handleAddReminder = async () => {
+    if (!newReminder.title.trim() || !newReminder.time) {
+      alert('Vui lòng điền đủ thông tin tiêu đề và giờ');
+      return;
+    }
+
+    setSubmitting(true);
+    const { error } = await add({
+      title: newReminder.title.trim(),
+      description: newReminder.note.trim() || null,
       type: newReminder.type,
       time: newReminder.time,
-      date: newReminder.date || undefined,
-      note: newReminder.note || undefined,
-      isActive: true,
-      completed: false,
-    };
-    setReminderList([reminder, ...reminderList]);
-    setShowAddModal(false);
-    setNewReminder({ title: '', date: '', time: '', type: 'medication', note: '' });
+      date: newReminder.date || null,
+      is_active: true,
+      last_notified: null
+    });
+    setSubmitting(false);
+
+    if (error) {
+      alert(`Lỗi khi tạo nhắc nhở: ${error}`);
+    } else {
+      setShowAddModal(false);
+      setNewReminder({ title: '', date: '', time: '', type: 'medication', note: '' });
+    }
   };
 
-  const toggleComplete = (id: string) => {
-    setReminderList(reminderList.map(r =>
-      r.id === id ? { ...r, completed: !r.completed } : r
-    ));
+  const toggleComplete = async (id: string, currentActive: boolean) => {
+    await update(id, { is_active: !currentActive });
   };
 
-  const deleteReminder = (id: string) => {
-    setReminderList(reminderList.filter(r => r.id !== id));
+  const deleteReminder = async (id: string) => {
+    if (confirm('Bạn có chắc muốn xóa nhắc nhở này?')) {
+      await remove(id);
+    }
   };
 
-  const activeReminders = reminderList.filter(r => !r.completed);
-  const completedReminders = reminderList.filter(r => r.completed);
+  // active: is_active === true, completed: is_active === false
+  const activeReminders = reminderList.filter(r => r.is_active);
+  const completedReminders = reminderList.filter(r => !r.is_active);
 
   return (
     <div className="animate-fadeIn space-y-6">
@@ -90,99 +80,107 @@ export default function RemindersPage() {
         </button>
       </div>
 
-      {/* Active Reminders */}
-      <div>
-        <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-secondary" />
-          Đang hoạt động ({activeReminders.length})
-        </h2>
-        <div className="space-y-3">
-          {activeReminders.length === 0 ? (
-            <div className="text-center py-12 bg-white rounded-2xl">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-              </div>
-              <p className="text-text-secondary">Bạn chưa có nhắc nhở nào</p>
-            </div>
-          ) : (
-            activeReminders.map((reminder) => {
-              const typeStyle = getTypeStyle(reminder.type);
-              return (
-                <div key={reminder.id} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-start gap-4">
-                    <button
-                      onClick={() => toggleComplete(reminder.id)}
-                      className="w-6 h-6 rounded-full border-2 border-gray-300 hover:border-primary flex items-center justify-center flex-shrink-0 mt-0.5 transition-all"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <h3 className="font-semibold text-base text-text-primary">{reminder.title}</h3>
-                          <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyle.bg} ${typeStyle.text}`}>
-                            {typeStyle.label}
-                          </span>
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <>
+          {/* Active Reminders */}
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-secondary" />
+              Đang hoạt động ({activeReminders.length})
+            </h2>
+            <div className="space-y-3">
+              {activeReminders.length === 0 ? (
+                <div className="text-center py-12 bg-white rounded-2xl">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <p className="text-text-secondary">Bạn chưa có nhắc nhở nào</p>
+                </div>
+              ) : (
+                activeReminders.map((reminder) => {
+                  const typeStyle = getTypeStyle(reminder.type);
+                  return (
+                    <div key={reminder.id} className="bg-white rounded-2xl p-4 shadow-sm hover:shadow-md transition-all">
+                      <div className="flex items-start gap-4">
+                        <button
+                          onClick={() => toggleComplete(reminder.id, reminder.is_active)}
+                          className="w-6 h-6 rounded-full border-2 border-gray-300 hover:border-primary flex items-center justify-center flex-shrink-0 mt-0.5 transition-all"
+                        />
+                        <div className="flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h3 className="font-semibold text-base text-text-primary">{reminder.title}</h3>
+                              <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyle.bg} ${typeStyle.text}`}>
+                                {typeStyle.label}
+                              </span>
+                            </div>
+                            <button onClick={() => deleteReminder(reminder.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors">
+                              <svg className="w-4 h-4 text-text-secondary hover:text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-4 mt-2 text-sm text-text-secondary">
+                            {reminder.date && (
+                              <span className="flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                {reminder.date}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              {reminder.time}
+                            </span>
+                          </div>
+                          {reminder.description && (
+                            <p className="text-sm text-text-secondary mt-2 bg-gray-50 rounded-lg p-2">{reminder.description}</p>
+                          )}
                         </div>
-                        <button onClick={() => deleteReminder(reminder.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 transition-colors">
-                          <svg className="w-4 h-4 text-text-secondary hover:text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Completed Reminders */}
+          {completedReminders.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary mb-3">Đã hoàn thành ({completedReminders.length})</h2>
+              <div className="space-y-3">
+                {completedReminders.map((reminder) => {
+                  const typeStyle = getTypeStyle(reminder.type);
+                  return (
+                    <div key={reminder.id} className="bg-white rounded-2xl p-4 shadow-sm opacity-70">
+                      <div className="flex items-start gap-4">
+                        <button onClick={() => toggleComplete(reminder.id, reminder.is_active)} className="w-6 h-6 rounded-full border-2 border-secondary bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                           </svg>
                         </button>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-text-primary line-through opacity-60">{reminder.title}</h3>
+                          <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyle.bg} ${typeStyle.text}`}>{typeStyle.label}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-text-secondary">
-                        {reminder.date && (
-                          <span className="flex items-center gap-1">
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            {reminder.date}
-                          </span>
-                        )}
-                        <span className="flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          {reminder.time}
-                        </span>
-                      </div>
-                      {reminder.note && (
-                        <p className="text-sm text-text-secondary mt-2 bg-gray-50 rounded-lg p-2">{reminder.note}</p>
-                      )}
                     </div>
-                  </div>
-                </div>
-              );
-            })
+                  );
+                })}
+              </div>
+            </div>
           )}
-        </div>
-      </div>
-
-      {/* Completed Reminders */}
-      {completedReminders.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-text-primary mb-3">Đã hoàn thành ({completedReminders.length})</h2>
-          <div className="space-y-3">
-            {completedReminders.map((reminder) => {
-              const typeStyle = getTypeStyle(reminder.type);
-              return (
-                <div key={reminder.id} className="bg-white rounded-2xl p-4 shadow-sm opacity-70">
-                  <div className="flex items-start gap-4">
-                    <button onClick={() => toggleComplete(reminder.id)} className="w-6 h-6 rounded-full border-2 border-secondary bg-secondary flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>
-                    </button>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-text-primary line-through opacity-60">{reminder.title}</h3>
-                      <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyle.bg} ${typeStyle.text}`}>{typeStyle.label}</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        </>
       )}
 
       {/* Add Reminder Modal */}
@@ -211,7 +209,7 @@ export default function RemindersPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-text-primary mb-1.5">Ngày</label>
+                  <label className="block text-sm font-semibold text-text-primary mb-1.5">Ngày (tùy chọn)</label>
                   <input
                     type="date"
                     value={newReminder.date}
@@ -256,8 +254,12 @@ export default function RemindersPage() {
                 <button onClick={() => setShowAddModal(false)} className="flex-1 py-3 px-4 bg-gray-100 text-text-primary rounded-xl font-semibold hover:bg-gray-200 transition-all">
                   Hủy
                 </button>
-                <button onClick={handleAddReminder} className="flex-1 py-3 px-4 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 transition-all">
-                  Thêm nhắc nhở
+                <button
+                  onClick={handleAddReminder}
+                  disabled={submitting}
+                  className="flex-1 py-3 px-4 bg-primary text-white rounded-xl font-semibold hover:bg-blue-700 transition-all disabled:opacity-50"
+                >
+                  {submitting ? 'Đang thêm...' : 'Thêm nhắc nhở'}
                 </button>
               </div>
             </div>

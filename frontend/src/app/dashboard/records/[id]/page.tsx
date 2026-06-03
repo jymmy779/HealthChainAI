@@ -1,15 +1,70 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { healthRecords } from '@/data/mockData';
+import { useHealthRecords } from '@/hooks/useData';
 import Button from '@/components/ui/Button';
 
 export default function RecordDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const record = healthRecords.find(r => r.id === params.id);
+  const { data: records, loading, remove, analyze, refetch } = useHealthRecords();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+
+  const record = records.find(r => r.id === params.id);
+  const isImage = record && record.file_url && (
+    record.file_url.toLowerCase().endsWith('.png') ||
+    record.file_url.toLowerCase().endsWith('.jpg') ||
+    record.file_url.toLowerCase().endsWith('.jpeg') ||
+    record.file_url.toLowerCase().endsWith('.webp') ||
+    record.file_url.toLowerCase().endsWith('.gif') ||
+    record.type === 'hinh-anh'
+  );
+
+  useEffect(() => {
+    if (record && record.metric) {
+      setAnalysisResult({
+        success: true,
+        message: "Hồ sơ đã được phân tích bằng AI trước đó.",
+        extracted_data: {
+          blood_sugar: record.metric.blood_sugar,
+          systolic: record.metric.systolic,
+          diastolic: record.metric.diastolic,
+          heart_rate: record.metric.heart_rate,
+          bmi: record.metric.bmi,
+          weight: record.metric.weight
+        },
+        metric_id: record.metric.id
+      });
+    }
+  }, [record]);
+
+  const handleAIAnalyze = async () => {
+    if (!record) return;
+    setAnalyzing(true);
+    setAnalysisResult(null);
+    const { error, data } = await analyze(record.id);
+    setAnalyzing(false);
+    if (!error) {
+      setAnalysisResult(data);
+      if (typeof refetch === 'function') {
+        refetch();
+      }
+    } else {
+      alert(`Lỗi phân tích AI: ${error}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20 animate-fadeIn">
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   if (!record) {
     return (
@@ -21,7 +76,7 @@ export default function RecordDetailPage() {
         </div>
         <h2 className="text-xl font-bold text-text-primary mb-2">Không tìm thấy hồ sơ</h2>
         <p className="text-text-secondary mb-6">Hồ sơ bạn đang tìm không tồn tại hoặc đã bị xóa.</p>
-        <Button onClick={() => router.push('/dashboard/records/list')} variant="primary">
+        <Button onClick={() => router.push('/dashboard/records')} variant="primary">
           Quay lại danh sách
         </Button>
       </div>
@@ -39,6 +94,17 @@ export default function RecordDetailPage() {
   };
 
   const typeStyle = getTypeStyle(record.type);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    const { error } = await remove(record.id);
+    setDeleting(false);
+    if (!error) {
+      router.push('/dashboard/records');
+    } else {
+      alert(`Lỗi khi xóa hồ sơ: ${error}`);
+    }
+  };
 
   return (
     <div className="animate-fadeIn space-y-6 max-w-3xl mx-auto">
@@ -65,15 +131,22 @@ export default function RecordDetailPage() {
             <div className="flex-1 min-w-0">
               <h2 className="text-xl font-bold text-text-primary">{record.name}</h2>
               <span className="inline-block mt-1 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-text-secondary">
-                {record.typeLabel}
+                {record.type_label}
               </span>
             </div>
             <div className="flex gap-2">
-              <button className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors">
-                <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </button>
+              {record.file_url && (
+                <a
+                  href={record.file_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-gray-100 transition-colors"
+                >
+                  <svg className="w-5 h-5 text-text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </a>
+              )}
               <button onClick={() => setShowDeleteModal(true)} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-red-50 transition-colors">
                 <svg className="w-5 h-5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -92,28 +165,32 @@ export default function RecordDetailPage() {
             </div>
             <div>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Bệnh viện / Phòng khám</p>
-              <p className="text-base font-medium text-text-primary mt-1">{record.hospital}</p>
+              <p className="text-base font-medium text-text-primary mt-1">{record.hospital || 'Không có'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Bác sĩ phụ trách</p>
-              <p className="text-base font-medium text-text-primary mt-1">{record.doctor}</p>
+              <p className="text-base font-medium text-text-primary mt-1">{record.doctor || 'Không có'}</p>
             </div>
           </div>
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Kích thước file</p>
-              <p className="text-base font-medium text-text-primary mt-1">{record.fileSize}</p>
+              <p className="text-base font-medium text-text-primary mt-1">{record.file_size || '0 MB'}</p>
             </div>
             <div>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Trạng thái Blockchain</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="w-2 h-2 rounded-full bg-secondary animate-pulse-soft" />
-                <span className="text-base font-medium text-secondary">Đã xác nhận</span>
+                <span className={`w-2 h-2 rounded-full ${record.blockchain_status === 'confirmed' ? 'bg-secondary animate-pulse-soft' : 'bg-warning animate-pulse-soft'}`} />
+                <span className={`text-base font-medium ${record.blockchain_status === 'confirmed' ? 'text-secondary' : 'text-warning'}`}>
+                  {record.blockchain_status === 'confirmed' ? 'Đã xác nhận' : 'Đang xử lý'}
+                </span>
               </div>
             </div>
             <div>
               <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Transaction Hash</p>
-              <p className="text-sm font-mono text-text-primary mt-1 truncate">{record.transactionHash}</p>
+              <p className="text-sm font-mono text-text-primary mt-1 truncate" title={record.transaction_hash || ''}>
+                {record.transaction_hash || 'Đang tạo...'}
+              </p>
             </div>
           </div>
         </div>
@@ -136,16 +213,161 @@ export default function RecordDetailPage() {
               <span className="text-sm font-semibold text-primary">Bảo mật Blockchain</span>
             </div>
             <p className="text-sm text-text-secondary">Hồ sơ này đã được mã hóa và lưu trữ trên IPFS. Hash giao dịch được ghi nhận bất biến trên Blockchain Polygon.</p>
-            <p className="text-xs font-mono text-text-secondary mt-2">IPFS Hash: {record.ipfsHash}</p>
+            <p className="text-xs font-mono text-text-secondary mt-2">IPFS Hash: {record.ipfs_hash || 'Đang tạo...'}</p>
           </div>
         </div>
 
+        {/* AI Analysis Section */}
+        <div className="px-6 pb-6">
+          <div className="bg-gradient-to-r from-primary-light/50 to-secondary-light/30 border border-primary/20 rounded-2xl p-5 relative overflow-hidden">
+            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                  </span>
+                  <h3 className="text-base font-bold text-text-primary">Trợ lý Phân tích Y khoa AI</h3>
+                  {record.metric_id && (
+                    <span className="px-2 py-0.5 text-[10px] font-bold bg-secondary-light text-secondary border border-secondary/20 rounded-md animate-fadeIn">
+                      Đã phân tích
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-text-secondary">
+                  Tự động quét tài liệu PDF này để trích xuất các chỉ số sinh hóa (Đường huyết, Huyết áp, Nhịp tim, BMI) và chạy mô hình dự báo nguy cơ sức khỏe.
+                </p>
+              </div>
+              <button
+                onClick={handleAIAnalyze}
+                disabled={analyzing}
+                className="py-3 px-5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 flex-shrink-0 disabled:opacity-50 cursor-pointer"
+              >
+                {analyzing ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Đang phân tích...</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    <span>{record.metric_id ? "Cập nhật phân tích" : "Phân tích chỉ số ngay"}</span>
+                  </>
+                )}
+              </button>
+            </div>
+            {analysisResult && (
+              <div className="mt-4 p-4 bg-white/85 rounded-xl border border-white/45 space-y-2 animate-fadeIn">
+                <p className="text-xs font-semibold text-secondary flex items-center gap-1">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  {analysisResult.message}
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                  {analysisResult.extracted_data.blood_sugar && (
+                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                      <span className="text-[10px] text-text-secondary block">Đường huyết</span>
+                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.blood_sugar} <span className="text-[10px] font-normal">mg/dL</span></span>
+                    </div>
+                  )}
+                  {analysisResult.extracted_data.systolic && (
+                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                      <span className="text-[10px] text-text-secondary block">Huyết áp</span>
+                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.systolic}/{analysisResult.extracted_data.diastolic} <span className="text-[10px] font-normal">mmHg</span></span>
+                    </div>
+                  )}
+                  {analysisResult.extracted_data.heart_rate && (
+                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                      <span className="text-[10px] text-text-secondary block">Nhịp tim</span>
+                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.heart_rate} <span className="text-[10px] font-normal">bpm</span></span>
+                    </div>
+                  )}
+                  {analysisResult.extracted_data.bmi && (
+                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                      <span className="text-[10px] text-text-secondary block">BMI</span>
+                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.bmi} <span className="text-[10px] font-normal">kg/m²</span></span>
+                    </div>
+                  )}
+                </div>
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => router.push(`/dashboard/ai/report?metric_id=${analysisResult.metric_id}`)}
+                    className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Xem báo cáo phân tích chi tiết AI &rarr;</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Document Preview */}
+        {record.file_url && (
+          <div className="px-6 pb-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-text-secondary uppercase tracking-wider">Bản xem trước tài liệu</p>
+              <a
+                href={`/api/records/${record.id}/file`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-primary hover:underline flex items-center gap-1 font-semibold"
+              >
+                <span>Mở trong tab mới</span>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </a>
+            </div>
+            <div className="border border-border rounded-xl overflow-hidden bg-gray-50/50 h-[500px] flex items-center justify-center relative">
+              {isImage ? (
+                <img
+                  src={`/api/records/${record.id}/file`}
+                  alt={record.name}
+                  className="max-w-full max-h-full object-contain animate-fadeIn"
+                />
+              ) : (
+                <iframe
+                  src={`/api/records/${record.id}/file`}
+                  className="w-full h-full border-none animate-fadeIn"
+                  title="PDF Preview"
+                />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="p-6 border-t border-border flex flex-col sm:flex-row gap-3">
-          <Button variant="primary" size="lg" className="flex-1" icon={() => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}>
-            Tải xuống
-          </Button>
-          <Button variant="outline" size="lg" className="flex-1" icon={() => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>}>
+          {record.file_url ? (
+            <a
+              href={record.file_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1"
+            >
+              <Button variant="primary" size="lg" className="w-full" icon={() => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}>
+                Tải xuống
+              </Button>
+            </a>
+          ) : (
+            <Button variant="primary" size="lg" className="flex-1" disabled icon={() => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>}>
+              Không có file đính kèm
+            </Button>
+          )}
+          <Button
+            onClick={() => router.push('/dashboard/access')}
+            variant="outline"
+            size="lg"
+            className="flex-1"
+            icon={() => <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>}
+          >
             Chia sẻ với bác sĩ
           </Button>
         </div>
@@ -169,8 +391,12 @@ export default function RecordDetailPage() {
               <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-3 px-4 bg-gray-100 text-text-primary rounded-xl font-semibold hover:bg-gray-200 transition-all">
                 Hủy
               </button>
-              <button onClick={() => setShowDeleteModal(false)} className="flex-1 py-3 px-4 bg-danger text-white rounded-xl font-semibold hover:bg-red-700 transition-all">
-                Xóa
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                className="flex-1 py-3 px-4 bg-danger text-white rounded-xl font-semibold hover:bg-red-700 transition-all disabled:opacity-50"
+              >
+                {deleting ? 'Đang xóa...' : 'Xóa'}
               </button>
             </div>
           </div>
