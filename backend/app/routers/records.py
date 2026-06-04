@@ -17,7 +17,7 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @router.get("", response_model=List[schemas.HealthRecordResponse])
-def get_records(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+def get_records(current_user: models.User = Depends(auth.require_patient), db: Session = Depends(get_db)):
     records = db.query(models.HealthRecord).filter(
         models.HealthRecord.user_id == current_user.id
     ).order_by(models.HealthRecord.created_at.desc()).all()
@@ -35,7 +35,7 @@ async def create_record(
     transaction_hash: Optional[str] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.require_patient)
 ):
     try:
         record_date = date.fromisoformat(date_val)
@@ -138,7 +138,7 @@ async def create_record(
 @router.delete("/{record_id}")
 def delete_record(
     record_id: uuid.UUID,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     record = db.query(models.HealthRecord).filter(
@@ -162,7 +162,7 @@ def delete_record(
 def update_blockchain_hash(
     record_id: uuid.UUID,
     payload: dict,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     record = db.query(models.HealthRecord).filter(
@@ -188,7 +188,7 @@ def update_blockchain_hash(
 def analyze_record(
     record_id: uuid.UUID,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
+    current_user: models.User = Depends(auth.require_patient)
 ):
     import re
     
@@ -349,7 +349,7 @@ def analyze_record(
 @router.get("/{record_id}/file")
 def get_record_file(
     record_id: uuid.UUID,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import FileResponse
@@ -371,5 +371,9 @@ def get_record_file(
     if record.type == "hinh-anh":
         media_type = "image/jpeg"
 
-    return FileResponse(file_path, media_type=media_type)
+    return FileResponse(
+        file_path,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{record.name}.pdf"'}
+    )
 

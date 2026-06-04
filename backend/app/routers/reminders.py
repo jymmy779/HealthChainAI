@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.get("", response_model=List[schemas.ReminderResponse])
 def get_reminders(
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     reminders = db.query(models.Reminder).filter(
@@ -20,7 +20,7 @@ def get_reminders(
 @router.post("", response_model=schemas.ReminderResponse)
 def create_reminder(
     reminder: schemas.ReminderCreate,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     new_reminder = models.Reminder(
@@ -41,7 +41,7 @@ def create_reminder(
 def update_reminder(
     reminder_id: uuid.UUID,
     updates: dict,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     reminder = db.query(models.Reminder).filter(
@@ -63,7 +63,7 @@ def update_reminder(
 @router.delete("/{reminder_id}")
 def delete_reminder(
     reminder_id: uuid.UUID,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     reminder = db.query(models.Reminder).filter(

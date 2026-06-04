@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .database import engine, Base
 from .config import settings
-from .routers import auth, records, metrics, permissions, logs, notifications, reminders
+from .routers import auth, records, metrics, permissions, logs, notifications, reminders, doctor
 
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
@@ -18,6 +18,20 @@ try:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE health_records ADD COLUMN metric_id VARCHAR(36)"))
             print("Successfully added metric_id column to health_records")
+    # Migration cho profile: is_verified, license_number
+    if 'profiles' in inspector.get_table_names():
+        profile_cols = [col['name'] for col in inspector.get_columns('profiles')]
+        with engine.begin() as conn:
+            if 'is_verified' not in profile_cols:
+                print("Adding is_verified column to profiles table...")
+                conn.execute(text("ALTER TABLE profiles ADD COLUMN is_verified BOOLEAN DEFAULT FALSE"))
+                # Bác sĩ hiện có: auto-verified
+                conn.execute(text("UPDATE profiles SET is_verified = TRUE WHERE role = 'doctor'"))
+                print("is_verified added and doctors auto-verified.")
+            if 'license_number' not in profile_cols:
+                print("Adding license_number column to profiles table...")
+                conn.execute(text("ALTER TABLE profiles ADD COLUMN license_number VARCHAR(100)"))
+                print("license_number added.")
 except Exception as e:
     print(f"Error during schema migration: {e}")
 
@@ -54,3 +68,4 @@ app.include_router(permissions.router, prefix="/api/permissions", tags=["permiss
 app.include_router(logs.router, prefix="/api/logs", tags=["logs"])
 app.include_router(notifications.router, prefix="/api/notifications", tags=["notifications"])
 app.include_router(reminders.router, prefix="/api/reminders", tags=["reminders"])
+app.include_router(doctor.router, prefix="/api/doctor", tags=["doctor"])

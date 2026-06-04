@@ -49,7 +49,7 @@ Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đ
    cd backend
    ```
 
-2. Tạo môi trường ảo Python (Virtual Environment):
+2. Tạo môi trường ảo Python (Virtual Environment) - **chỉ thực hiện 1 lần đầu tiên**:
    ```bash
    # Trên Windows:
    python -m venv venv
@@ -57,19 +57,20 @@ Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đ
    python3 -m venv venv
    ```
 
-3. Kích hoạt môi trường ảo:
+3. **Kích hoạt môi trường ảo** — bước này rất quan trọng, mỗi khi mở terminal mới đều phải chạy:
    ```bash
    # Trên Windows (PowerShell):
    .\venv\Scripts\Activate.ps1
-   
+
    # Trên Windows (CMD):
    .\venv\Scripts\activate.bat
-   
+
    # Trên macOS/Linux:
    source venv/bin/activate
    ```
+   ✅ Sau khi kích hoạt thành công, bạn sẽ thấy chữ `(venv)` xuất hiện ở đầu dòng terminal.
 
-4. Cài đặt các thư viện phụ thuộc:
+4. Cài đặt các thư viện phụ thuộc - **chỉ thực hiện 1 lần đầu tiên**:
    ```bash
    pip install -r requirements.txt
    ```
@@ -77,6 +78,10 @@ Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đ
 5. Khởi chạy Backend Server:
    ```bash
    uvicorn app.main:app --port 8000 --reload
+   ```
+   Nếu gặp lỗi `uvicorn not recognized`, hãy dùng lệnh thay thế:
+   ```bash
+   python -m uvicorn app.main:app --port 8000 --reload
    ```
    *Backend sẽ chạy tại địa chỉ:* `http://localhost:8000`
 
@@ -102,6 +107,33 @@ Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đ
 
 ---
 
+## 🐛 Troubleshooting
+
+### Lỗi: `uvicorn : The term 'uvicorn' is not recognized...`
+
+**Nguyên nhân**: Môi trường ảo `venv` chưa được kích hoạt.
+
+1. Kích hoạt venv trước (xem Bước 2.3):
+   ```powershell
+   .\backend\venv\Scripts\Activate.ps1   # PowerShell
+   ```
+2. Sau đó chạy lại lệnh uvicorn.
+
+Hoặc dùng lệnh thay thế không cần venv:
+```powershell
+cd backend && python -m uvicorn app.main:app --port 8000 --reload
+```
+
+### Lỗi kết nối Database
+
+Nếu chưa cài PostgreSQL, bạn có thể chuyển sang SQLite bằng cách sửa file `backend/.env`:
+```env
+DATABASE_URL=sqlite:///./healthchain.db
+```
+Sau đó khởi động lại backend. Project sẽ tự động dùng SQLite và tạo file `healthchain.db`.
+
+---
+
 ## 🛠️ Một số lệnh debug hữu ích
 
 - **Kiểm tra kiểu dữ liệu (TypeScript)**:
@@ -112,4 +144,37 @@ Trước khi bắt đầu, hãy đảm bảo máy tính của bạn đã cài đ
 - **Xóa sạch dữ liệu Database SQLite để test lại**:
   Bạn có thể xóa file `backend/healthchain.db` và khởi động lại backend, hệ thống sẽ tự động khởi tạo lại DB và chạy migration tự động.
 
-Chúc bạn có chuyến đi làm việc hiệu quả và thuận lợi với chiếc laptop của mình! 💻✈️
+Chúc bạn có chuyến đi làm việc hiệu quả và thuận lợi với chiếc laptop của mình! 💻✈️**Cách khắc phục**:
+1. Kích hoạt venv trước (xem Bước 2.3):
+   ```powershell
+   .\backend\venv\Scripts\Activate.ps1   # PowerShell
+   ```
+2. Sau đó chạy lại lệnh uvicorn.
+
+Hoặc dùng lệnh thay thế không cần venv:
+```powershell
+cd backend && python -m uvicorn app.main:app --port 8000 --reload
+```
+
+### Lỗi kết nối Database
+
+Nếu chưa cài PostgreSQL, bạn có thể chuyển sang SQLite bằng cách sửa file `backend/.env`:
+```env
+DATABASE_URL=sqlite:///./healthchain.db
+```
+Sau đó khởi động lại backend. Project sẽ tự động dùng SQLite và tạo file `healthchain.db`.
+
+---
+
+## 🛠️ Một số lệnh debug hữu ích
+
+- **Kiểm tra kiểu dữ liệu (TypeScript)**:
+  ```bash
+  cd frontend
+  npx tsc --noEmit
+  ```
+- **Xóa sạch dữ liệu Database SQLite để test lại**:
+  Bạn có thể xóa file `backend/healthchain.db` và khởi động lại backend, hệ thống sẽ tự động khởi tạo lại DB và chạy migration tự động.
+
+
+

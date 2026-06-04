@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.get("", response_model=List[schemas.AccessPermissionResponse])
 def get_permissions(
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     # Retrieve permissions where current user is the patient
@@ -23,7 +23,7 @@ def get_permissions(
 @router.post("", response_model=schemas.AccessPermissionResponse)
 def grant_permission(
     permission: schemas.AccessPermissionCreate,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     # Verify doctor exists
@@ -72,7 +72,7 @@ def grant_permission(
 @router.put("/{permission_id}/revoke", response_model=schemas.AccessPermissionResponse)
 def revoke_permission(
     permission_id: uuid.UUID,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     permission = db.query(models.AccessPermission).filter(

@@ -9,7 +9,7 @@ router = APIRouter()
 
 @router.get("", response_model=List[schemas.AccessLogResponse])
 def get_logs(
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     # Retrieve access logs where current user is the patient

@@ -22,6 +22,7 @@ class UserRegister(BaseModel):
     gender: Optional[str] = None
     specialty: Optional[str] = None
     hospital: Optional[str] = None
+    license_number: Optional[str] = None  # Số chứng chỉ hành nghề
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -49,6 +50,8 @@ class ProfileResponse(BaseModel):
     role: str
     specialty: Optional[str] = None
     hospital: Optional[str] = None
+    license_number: Optional[str] = None
+    is_verified: bool = False
     two_factor_enabled: bool
     passkey_enabled: bool
     language: str
@@ -73,6 +76,7 @@ class ProfileUpdate(BaseModel):
     avatar_url: Optional[str] = None
     specialty: Optional[str] = None
     hospital: Optional[str] = None
+    license_number: Optional[str] = None
 
 # Health Metric
 class HealthMetricCreate(BaseModel):
@@ -156,6 +160,7 @@ class AccessPermissionResponse(BaseModel):
     created_at: datetime
     doctor: Optional[ProfileResponse] = None
     patient: Optional[ProfileResponse] = None
+    accessible_records_count: int = 0
 
     class Config:
         from_attributes = True

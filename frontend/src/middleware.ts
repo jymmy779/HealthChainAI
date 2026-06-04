@@ -39,10 +39,30 @@ export function middleware(request: NextRequest) {
   }
 
   // Doctor route protection - check role in JWT claims
-  if (user && pathname.startsWith('/doctor')) {
+  if (user && pathname.startsWith('/dashboard/doctor')) {
     if (user.role !== 'doctor') {
       const url = request.nextUrl.clone();
       url.pathname = '/dashboard';
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // Patient route protection - check role in JWT claims
+  const patientPaths = [
+    '/dashboard/records',
+    '/dashboard/ai',
+    '/dashboard/access',
+    '/dashboard/reminders',
+    '/dashboard/metrics',
+  ];
+
+  if (user && user.role !== 'patient') {
+    const isPatientOnlyPath = patientPaths.some((path) => pathname.startsWith(path));
+    const isPatientDashboardHome = pathname === '/dashboard';
+
+    if (isPatientOnlyPath || isPatientDashboardHome) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/dashboard/doctor';
       return NextResponse.redirect(url);
     }
   }

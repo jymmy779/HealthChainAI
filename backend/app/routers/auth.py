@@ -30,7 +30,7 @@ def signup(user_data: schemas.UserRegister, response: Response, db: Session = De
     db.commit()
     db.refresh(new_user)
 
-    # Create Profile
+    # Create Profile — bác sĩ tự động is_verified=True (MVP, sau thêm upload chứng chỉ)
     new_profile = models.Profile(
         id=new_user.id,
         full_name=user_data.fullName,
@@ -39,8 +39,10 @@ def signup(user_data: schemas.UserRegister, response: Response, db: Session = De
         date_of_birth=user_data.dateOfBirth,
         gender=user_data.gender,
         role=user_data.role,
-        specialty=user_data.specialty,
-        hospital=user_data.hospital,
+        specialty=getattr(user_data, 'specialty', None),
+        hospital=getattr(user_data, 'hospital', None),
+        license_number=getattr(user_data, 'license_number', None),
+        is_verified=(user_data.role == "doctor"),  # Bác sĩ auto-verified cho MVP
         language="vi",
         two_factor_enabled=False,
         passkey_enabled=False,
@@ -137,7 +139,11 @@ def update_profile(
 
 @router.get("/doctors", response_model=List[schemas.ProfileResponse])
 def get_doctors(db: Session = Depends(get_db)):
-    doctors = db.query(models.Profile).filter(models.Profile.role == "doctor").all()
+    # Chỉ trả về bác sĩ đã được xác minh (is_verified=True)
+    doctors = db.query(models.Profile).filter(
+        models.Profile.role == "doctor",
+        models.Profile.is_verified == True
+    ).all()
     return doctors
 
 @router.post("/phone/login")

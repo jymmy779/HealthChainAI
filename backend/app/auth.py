@@ -75,3 +75,13 @@ async def get_current_user(request: Request, db: Session = Depends(get_db)) -> m
         )
     
     return user
+
+
+def require_patient(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Dependency: yêu cầu user phải là bệnh nhân."""
+    if not current_user.profile or current_user.profile.role != "patient":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Quyền truy cập chỉ dành cho tài khoản bệnh nhân."
+        )
+    return current_user

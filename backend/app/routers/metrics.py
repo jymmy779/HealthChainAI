@@ -17,7 +17,7 @@ except ImportError:
 router = APIRouter()
 
 @router.get("", response_model=List[schemas.HealthMetricResponse])
-def get_metrics(current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+def get_metrics(current_user: models.User = Depends(auth.require_patient), db: Session = Depends(get_db)):
     metrics = db.query(models.HealthMetric).filter(
         models.HealthMetric.user_id == current_user.id
     ).order_by(models.HealthMetric.date.asc()).all()
@@ -26,7 +26,7 @@ def get_metrics(current_user: models.User = Depends(auth.get_current_user), db: 
 @router.post("", response_model=schemas.HealthMetricResponse)
 def create_metric(
     metric: schemas.HealthMetricCreate,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     # Calculate BMI if height and weight are available and BMI is not provided
@@ -58,7 +58,7 @@ def create_metric(
 @router.get("/predictions")
 def get_predictions(
     metric_id: Optional[uuid.UUID] = None,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_user: models.User = Depends(auth.require_patient),
     db: Session = Depends(get_db)
 ):
     profile = db.query(models.Profile).filter(models.Profile.id == current_user.id).first()

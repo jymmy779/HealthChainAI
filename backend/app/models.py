@@ -120,9 +120,11 @@ class Profile(Base):
     emergency_contact = Column(JSONCompatible, nullable=True)
     insurance_number = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
-    role = Column(String, nullable=False, default="patient") # 'patient' or 'doctor'
+    role = Column(String, nullable=False, default="patient") # 'patient' or 'doctor' or 'admin'
     specialty = Column(String, nullable=True)
     hospital = Column(String, nullable=True)
+    license_number = Column(String, nullable=True)  # Số chứng chỉ hành nghề
+    is_verified = Column(Boolean, default=False)     # Bác sĩ đã được xác minh chưa
     two_factor_enabled = Column(Boolean, default=False)
     passkey_enabled = Column(Boolean, default=False)
     language = Column(String, default="vi")
@@ -182,6 +184,20 @@ class AccessPermission(Base):
 
     doctor = relationship("Profile", foreign_keys=[doctor_id])
     patient = relationship("Profile", foreign_keys=[patient_id])
+
+    @property
+    def accessible_records_count(self) -> int:
+        from sqlalchemy.orm import object_session
+        session = object_session(self)
+        if session is None:
+            return 0
+        if self.access_level == "all":
+            return session.query(HealthRecord).filter(HealthRecord.user_id == self.patient_id).count()
+        elif self.access_level == "limited" and self.limited_records:
+            return len(self.limited_records)
+        elif self.access_level == "single" and self.single_record:
+            return 1
+        return 0
 
 class AccessLog(Base):
     __tablename__ = "access_logs"
