@@ -76,16 +76,6 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-primary-light/30 to-surface flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 p-6 lg:p-8 animate-fadeIn">
-          {/* Demo Hint */}
-          <div className="mb-4 p-3 bg-secondary-light/30 border border-secondary/20 rounded-xl">
-            <div className="flex items-center gap-2 text-sm font-medium text-secondary-dark">
-              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Vui lòng điền cấu hình Supabase trong `.env.local` trước khi kiểm tra đăng nhập.</span>
-            </div>
-          </div>
-
           {/* Logo & Title */}
           <div className="text-center mb-8">
             <div className="w-14 h-14 bg-gradient-to-br from-primary to-secondary rounded-2xl flex items-center justify-center mx-auto shadow-lg shadow-primary/20">

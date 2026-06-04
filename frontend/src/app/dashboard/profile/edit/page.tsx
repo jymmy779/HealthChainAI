@@ -1,12 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 
 export default function EditProfilePage() {
-  const { profile, updateProfile, loading: authLoading } = useAuth();
+  const { profile, updateProfile, refreshProfile, loading: authLoading } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const router = useRouter();
 
   const [fullName, setFullName] = useState('');
@@ -18,8 +20,32 @@ export default function EditProfilePage() {
   const [bloodGroup, setBloodGroup] = useState('O+');
   const [allergies, setAllergies] = useState('');
   const [chronicDiseases, setChronicDiseases] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [hospital, setHospital] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  
+  const [hospitalsList, setHospitalsList] = useState<string[]>([]);
+  const [specialtiesList, setSpecialtiesList] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/auth/hospitals')
+      .then(res => res.json())
+      .then(data => setHospitalsList(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (hospital) {
+      fetch(`/api/auth/hospitals/specialties?hospital=${encodeURIComponent(hospital)}`)
+        .then(res => res.json())
+        .then(data => setSpecialtiesList(data || []))
+        .catch(() => setSpecialtiesList([]));
+    } else {
+      setSpecialtiesList([]);
+    }
+  }, [hospital]);
 
   useEffect(() => {
     if (profile) {
@@ -32,8 +58,45 @@ export default function EditProfilePage() {
       setBloodGroup(profile.blood_group || 'O+');
       setAllergies(profile.allergies?.join(', ') || '');
       setChronicDiseases(profile.chronic_diseases?.join(', ') || '');
+      setSpecialty(profile.specialty || '');
+      setHospital(profile.hospital || '');
+      setLicenseNumber(profile.license_number || '');
     }
   }, [profile]);
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Kích thước ảnh quá lớn (tối đa 5MB).');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setError('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/auth/profile/avatar', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.detail || 'Lỗi tải lên ảnh đại diện.');
+      } else {
+        await refreshProfile();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Lỗi kết nối máy chủ.');
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -57,17 +120,15 @@ export default function EditProfilePage() {
     setSubmitting(true);
     setError('');
 
-    const allergiesArray = allergies
-      .split(',')
-      .map(a => a.trim())
-      .filter(Boolean);
-
-    const chronicDiseasesArray = chronicDiseases
-      .split(',')
-      .map(c => c.trim())
-      .filter(Boolean);
-
-    const updates = {
+    const updates = profile.role === 'doctor' ? {
+      full_name: fullName.trim(),
+      phone: phone.trim() || null,
+      date_of_birth: dateOfBirth || null,
+      gender,
+      specialty: specialty.trim() || null,
+      hospital: hospital.trim() || null,
+      license_number: licenseNumber.trim() || null,
+    } : {
       full_name: fullName.trim(),
       phone: phone.trim() || null,
       date_of_birth: dateOfBirth || null,
@@ -75,8 +136,8 @@ export default function EditProfilePage() {
       height: height ? parseFloat(height) : null,
       weight: weight ? parseFloat(weight) : null,
       blood_group: bloodGroup,
-      allergies: allergiesArray,
-      chronic_diseases: chronicDiseasesArray,
+      allergies: allergies.split(',').map(a => a.trim()).filter(Boolean),
+      chronic_diseases: chronicDiseases.split(',').map(c => c.trim()).filter(Boolean),
     };
 
     const { error: updateError } = await updateProfile(updates);
@@ -111,14 +172,34 @@ export default function EditProfilePage() {
         <form onSubmit={handleSave} className="space-y-5">
           {/* Avatar Upload */}
           <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-3xl font-bold text-white">
-              {fullName?.charAt(0) || '?'}
-            </div>
+            {profile.avatar_url ? (
+              <img 
+                src={profile.avatar_url} 
+                alt="Avatar" 
+                className="w-20 h-20 rounded-full object-cover border-2 border-border shadow-sm"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-3xl font-bold text-white">
+                {fullName?.charAt(0) || '?'}
+              </div>
+            )}
             <div>
-              <button type="button" className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark transition-all">
-                Cập nhật ảnh
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+              />
+              <button 
+                type="button" 
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark transition-all disabled:opacity-50"
+              >
+                {uploadingAvatar ? 'Đang tải...' : 'Cập nhật ảnh'}
               </button>
-              <p className="text-xs text-text-secondary mt-1">JPG, PNG tối đa 5MB</p>
+              <p className="text-xs text-text-secondary mt-1">JPG, PNG, WEBP tối đa 5MB</p>
             </div>
           </div>
 
@@ -129,7 +210,7 @@ export default function EditProfilePage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base"
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base animate-fadeIn"
               />
             </div>
             <div>
@@ -138,7 +219,7 @@ export default function EditProfilePage() {
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base"
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base animate-fadeIn"
               />
             </div>
             <div>
@@ -147,7 +228,7 @@ export default function EditProfilePage() {
                 type="date"
                 value={dateOfBirth}
                 onChange={(e) => setDateOfBirth(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base"
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base animate-fadeIn"
               />
             </div>
             <div>
@@ -155,63 +236,113 @@ export default function EditProfilePage() {
               <select
                 value={gender}
                 onChange={(e) => setGender(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary"
+                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary animate-fadeIn"
               >
                 <option value="Nam">Nam</option>
                 <option value="Nữ">Nữ</option>
                 <option value="Khác">Khác</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Chiều cao (cm)</label>
-              <input
-                type="number"
-                value={height}
-                onChange={(e) => setHeight(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Cân nặng (kg)</label>
-              <input
-                type="number"
-                value={weight}
-                onChange={(e) => setWeight(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Nhóm máu</label>
-              <select
-                value={bloodGroup}
-                onChange={(e) => setBloodGroup(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary"
-              >
-                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Dị ứng thuốc (phân tách bằng dấu phẩy)</label>
-              <textarea
-                value={allergies}
-                onChange={(e) => setAllergies(e.target.value)}
-                placeholder="Ví dụ: Penicillin, Aspirin"
-                rows={2}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base resize-none"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Bệnh mãn tính (phân tách bằng dấu phẩy)</label>
-              <textarea
-                value={chronicDiseases}
-                onChange={(e) => setChronicDiseases(e.target.value)}
-                placeholder="Ví dụ: Tiểu đường Type 2, Cao huyết áp"
-                rows={2}
-                className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base resize-none"
-              />
-            </div>
+
+            {profile.role === 'doctor' ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Bệnh viện / Cơ sở</label>
+                  <select
+                    value={hospital}
+                    onChange={(e) => {
+                      setHospital(e.target.value);
+                      setSpecialty('');
+                    }}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary animate-fadeIn"
+                  >
+                    <option value="">Chọn bệnh viện</option>
+                    {hospitalsList.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Chuyên khoa</label>
+                  <select
+                    value={specialty}
+                    onChange={(e) => setSpecialty(e.target.value)}
+                    disabled={!hospital}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary disabled:opacity-50 animate-fadeIn"
+                  >
+                    <option value="">
+                      {hospital ? "Chọn chuyên khoa" : "Vui lòng chọn bệnh viện trước"}
+                    </option>
+                    {specialtiesList.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Số chứng chỉ hành nghề (CCHN)</label>
+                  <input
+                    type="text"
+                    value={licenseNumber}
+                    onChange={(e) => setLicenseNumber(e.target.value)}
+                    placeholder="Ví dụ: 12345/BYT-CCHN"
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base font-mono animate-fadeIn"
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Chiều cao (cm)</label>
+                  <input
+                    type="number"
+                    value={height}
+                    onChange={(e) => setHeight(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base animate-fadeIn"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Cân nặng (kg)</label>
+                  <input
+                    type="number"
+                    value={weight}
+                    onChange={(e) => setWeight(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base animate-fadeIn"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Nhóm máu</label>
+                  <select
+                    value={bloodGroup}
+                    onChange={(e) => setBloodGroup(e.target.value)}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary animate-fadeIn"
+                  >
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(g => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Dị ứng thuốc (phân tách bằng dấu phẩy)</label>
+                  <textarea
+                    value={allergies}
+                    onChange={(e) => setAllergies(e.target.value)}
+                    placeholder="Ví dụ: Penicillin, Aspirin"
+                    rows={2}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base resize-none animate-fadeIn"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-text-primary mb-1.5">Bệnh mãn tính (phân tách bằng dấu phẩy)</label>
+                  <textarea
+                    value={chronicDiseases}
+                    onChange={(e) => setChronicDiseases(e.target.value)}
+                    placeholder="Ví dụ: Tiểu đường Type 2, Cao huyết áp"
+                    rows={2}
+                    className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base resize-none animate-fadeIn"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="bg-warning-light/30 rounded-xl p-4 flex items-start gap-3">

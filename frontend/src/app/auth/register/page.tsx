@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
@@ -19,6 +19,30 @@ export default function RegisterPage() {
   const [gender, setGender] = useState('Nam');
   const [specialty, setSpecialty] = useState('');
   const [hospital, setHospital] = useState('');
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [hospitalsList, setHospitalsList] = useState<string[]>([]);
+  const [specialtiesList, setSpecialtiesList] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch('/api/auth/hospitals')
+      .then(res => res.json())
+      .then(data => setHospitalsList(data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (hospital) {
+      fetch(`/api/auth/hospitals/specialties?hospital=${encodeURIComponent(hospital)}`)
+        .then(res => res.json())
+        .then(data => {
+          setSpecialtiesList(data || []);
+        })
+        .catch(() => setSpecialtiesList([]));
+    } else {
+      setSpecialtiesList([]);
+      setSpecialty('');
+    }
+  }, [hospital]);
 
   // Step 2 Fields
   const [password, setPassword] = useState('');
@@ -47,6 +71,10 @@ export default function RegisterPage() {
       }
       if (!hospital.trim()) {
         setError('Vui lòng nhập bệnh viện công tác');
+        return;
+      }
+      if (!licenseNumber.trim()) {
+        setError('Vui lòng nhập số chứng chỉ hành nghề');
         return;
       }
     }
@@ -96,12 +124,17 @@ export default function RegisterPage() {
         role,
         specialty: role === 'doctor' ? specialty : undefined,
         hospital: role === 'doctor' ? hospital : undefined,
+        licenseNumber: role === 'doctor' ? licenseNumber : undefined,
       });
 
       if (err) {
         setError(err);
       } else {
-        router.push('/dashboard');
+        if (role === 'doctor') {
+          router.push('/dashboard/doctor');
+        } else {
+          router.push('/dashboard');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Có lỗi xảy ra khi đăng ký');
@@ -236,22 +269,44 @@ export default function RegisterPage() {
               ) : (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-text-primary mb-1.5">Chuyên khoa</label>
-                    <input
-                      type="text"
-                      value={specialty}
-                      onChange={(e) => setSpecialty(e.target.value)}
-                      placeholder="Ví dụ: Tim mạch, Nhi khoa..."
+                    <label className="block text-sm font-medium text-text-primary mb-1.5">Bệnh viện công tác</label>
+                    <select
+                      value={hospital}
+                      onChange={(e) => {
+                        setHospital(e.target.value);
+                        setSpecialty('');
+                      }}
                       className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary"
-                    />
+                    >
+                      <option value="">Chọn bệnh viện</option>
+                      {hospitalsList.map(h => (
+                        <option key={h} value={h}>{h}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-text-primary mb-1.5">Bệnh viện công tác</label>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5">Chuyên khoa</label>
+                    <select
+                      value={specialty}
+                      onChange={(e) => setSpecialty(e.target.value)}
+                      disabled={!hospital}
+                      className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary disabled:opacity-50"
+                    >
+                      <option value="">
+                        {hospital ? "Chọn chuyên khoa" : "Vui lòng chọn bệnh viện trước"}
+                      </option>
+                      {specialtiesList.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-text-primary mb-1.5">Số chứng chỉ hành nghề</label>
                     <input
                       type="text"
-                      value={hospital}
-                      onChange={(e) => setHospital(e.target.value)}
-                      placeholder="Tên bệnh viện / phòng khám"
+                      value={licenseNumber}
+                      onChange={(e) => setLicenseNumber(e.target.value)}
+                      placeholder="Số CCHN (ví dụ: 12345/BYT-CCHN)"
                       className="w-full px-4 py-3 bg-gray-50 rounded-xl border border-border focus:border-primary focus:ring-2 focus:ring-primary-light outline-none transition-all text-base text-text-primary"
                     />
                   </div>

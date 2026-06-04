@@ -112,3 +112,27 @@ def register_record_on_blockchain(
         print(f"Failed to submit transaction to blockchain: {e}")
         import uuid
         return f"0xmockerr{uuid.uuid4().hex[:32]}"
+
+def get_record_from_blockchain(record_id: str) -> dict:
+    """Truy vấn thông tin record đã đăng ký trên blockchain."""
+    w3 = get_web3_client()
+    if not w3:
+        print("Blockchain node not connected. Returning None...")
+        return None
+
+    try:
+        contract_address = getattr(settings, "CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3")
+        contract = w3.eth.contract(address=w3.to_checksum_address(contract_address), abi=CONTRACT_ABI)
+        
+        # Gọi view function getRecord
+        record_data = contract.functions.getRecord(record_id).call()
+        return {
+            "patient_id": record_data[0],
+            "ipfs_hash": record_data[1],
+            "file_hash": record_data[2],
+            "timestamp": record_data[3],
+            "registered_by": record_data[4]
+        }
+    except Exception as e:
+        print(f"Failed to fetch record from blockchain: {e}")
+        return None

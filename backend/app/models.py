@@ -103,6 +103,7 @@ class User(Base):
 
     profile = relationship("Profile", back_populates="user", uselist=False, cascade="all, delete-orphan")
     passkeys = relationship("PasskeyCredential", back_populates="user", cascade="all, delete-orphan")
+    sessions = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
 
 class Profile(Base):
     __tablename__ = "profiles"
@@ -125,6 +126,10 @@ class Profile(Base):
     hospital = Column(String, nullable=True)
     license_number = Column(String, nullable=True)  # Số chứng chỉ hành nghề
     is_verified = Column(Boolean, default=False)     # Bác sĩ đã được xác minh chưa
+    certificate_url = Column(String, nullable=True)  # Đường dẫn file ảnh/PDF CCHN
+    certificate_name = Column(String, nullable=True) # Tên file gốc của minh chứng CCHN
+    verification_status = Column(String, nullable=True, default="unverified") # 'unverified', 'pending', 'approved', 'failed'
+    verification_feedback = Column(String, nullable=True) # Chi tiết lỗi hoặc kết quả từ AI/Admin
     two_factor_enabled = Column(Boolean, default=False)
     passkey_enabled = Column(Boolean, default=False)
     language = Column(String, default="vi")
@@ -253,3 +258,16 @@ class PasskeyCredential(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", back_populates="passkeys")
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    id = Column(UUIDCompatible, primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUIDCompatible, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+    device_label = Column(String, nullable=True)  # e.g. "Chrome trên Windows"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    last_active = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="sessions")

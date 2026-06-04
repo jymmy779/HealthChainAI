@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAuth } from '@/context/AuthContext';
 import { useHealthMetrics, useHealthRecords } from '@/hooks/useData';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && profile?.role === 'doctor') {
+      router.push('/dashboard/doctor');
+    }
+  }, [profile, authLoading, router]);
+
   const { data: metricsData, loading: metricsLoading } = useHealthMetrics();
   const { data: recordsData, loading: recordsLoading } = useHealthRecords();
 
@@ -56,6 +65,17 @@ export default function DashboardPage() {
   };
 
   const displayName = profile?.full_name || 'Người dùng';
+
+  if (authLoading || (profile && profile.role === 'doctor')) {
+    return (
+      <div className="min-h-[calc(100vh-10rem)] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-text-secondary font-medium">Đang chuyển hướng...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (metricsLoading || recordsLoading) {
     return (

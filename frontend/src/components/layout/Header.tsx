@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/hooks/useData';
+import Modal from '@/components/ui/Modal';
 
 interface HeaderProps {
   onToggleSidebar: () => void;
@@ -15,14 +16,20 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const { profile, signOut } = useAuth();
   const { unreadCount } = useNotifications();
   const [showProfile, setShowProfile] = useState(false);
+  const [showConfirmLogout, setShowConfirmLogout] = useState(false);
 
   const navigateAndClose = (path: string) => {
     setShowProfile(false);
     router.push(path);
   };
 
-  const handleSignOut = async () => {
+  const handleSignOutClick = () => {
     setShowProfile(false);
+    setShowConfirmLogout(true);
+  };
+
+  const handleConfirmSignOut = async () => {
+    setShowConfirmLogout(false);
     await signOut();
   };
 
@@ -79,9 +86,17 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
               onClick={() => setShowProfile(!showProfile)}
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 transition-colors"
             >
-              <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
-                {displayName.charAt(0)}
-              </div>
+              {profile?.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={displayName}
+                  className="w-8 h-8 lg:w-9 lg:h-9 rounded-full object-cover border border-border"
+                />
+              ) : (
+                <div className="w-8 h-8 lg:w-9 lg:h-9 rounded-full bg-gradient-to-br from-primary to-secondary flex items-center justify-center text-white font-bold text-sm">
+                  {displayName.charAt(0)}
+                </div>
+              )}
               <span className="hidden lg:block text-sm font-medium text-text-primary max-w-[120px] truncate">
                 {displayName}
               </span>
@@ -117,7 +132,7 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
                   </div>
                   <div className="p-2 border-t border-border">
                     <button
-                      onClick={handleSignOut}
+                      onClick={handleSignOutClick}
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-red-50 transition-colors text-danger text-left"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -132,6 +147,32 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
           </div>
         </div>
       </div>
+      <Modal
+        isOpen={showConfirmLogout}
+        onClose={() => setShowConfirmLogout(false)}
+        title="Xác nhận đăng xuất"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary leading-relaxed">
+            Bạn có chắc chắn muốn đăng xuất khỏi hệ thống HealthChainAI không?
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowConfirmLogout(false)}
+              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-text-primary rounded-xl text-sm font-semibold transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              onClick={handleConfirmSignOut}
+              className="px-4 py-2 bg-danger hover:bg-danger-dark text-white rounded-xl text-sm font-semibold transition-colors"
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      </Modal>
     </header>
   );
 }

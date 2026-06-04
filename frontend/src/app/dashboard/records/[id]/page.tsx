@@ -13,6 +13,30 @@ export default function RecordDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<any>(null);
+  const [verifyError, setVerifyError] = useState<string | null>(null);
+
+  const handleVerifyIntegrity = async () => {
+    if (!record) return;
+    setVerifying(true);
+    setVerifyResult(null);
+    setVerifyError(null);
+    try {
+      const res = await fetch(`/api/records/${record.id}/verify`);
+      if (res.ok) {
+        const data = await res.json();
+        setVerifyResult(data);
+      } else {
+        const errData = await res.json();
+        setVerifyError(errData.detail || 'Lỗi xác minh tính toàn vẹn hồ sơ.');
+      }
+    } catch (err: any) {
+      setVerifyError(err.message || 'Lỗi mạng khi thực hiện xác minh.');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const record = records.find(r => r.id === params.id);
   const isImage = record && record.file_url && (
@@ -203,18 +227,116 @@ export default function RecordDetailPage() {
           </div>
         )}
 
-        {/* IPFS Info */}
-        <div className="px-6 pb-6">
-          <div className="bg-primary-light/30 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-              </svg>
-              <span className="text-sm font-semibold text-primary">Bảo mật Blockchain</span>
+        {/* IPFS Info & Blockchain Integrity Verify */}
+        <div className="px-6 pb-6 space-y-4">
+          <div className="bg-primary-light/30 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span className="text-sm font-semibold text-primary">Bảo mật Blockchain</span>
+              </div>
+              <p className="text-sm text-text-secondary">Hồ sơ này đã được mã hóa và lưu trữ trên IPFS. Hash giao dịch được ghi nhận bất biến trên Blockchain Polygon.</p>
+              <p className="text-xs font-mono text-text-secondary mt-2">IPFS Hash: {record.ipfs_hash || 'Đang tạo...'}</p>
             </div>
-            <p className="text-sm text-text-secondary">Hồ sơ này đã được mã hóa và lưu trữ trên IPFS. Hash giao dịch được ghi nhận bất biến trên Blockchain Polygon.</p>
-            <p className="text-xs font-mono text-text-secondary mt-2">IPFS Hash: {record.ipfs_hash || 'Đang tạo...'}</p>
+            <button
+              onClick={handleVerifyIntegrity}
+              disabled={verifying}
+              className="py-2.5 px-4 bg-primary text-white rounded-xl text-xs font-bold hover:bg-primary-dark transition-all flex items-center gap-1.5 disabled:opacity-50 flex-shrink-0 cursor-pointer self-start md:self-center"
+            >
+              {verifying ? (
+                <>
+                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Đang xác minh...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                  </svg>
+                  <span>Xác minh tính toàn vẹn</span>
+                </>
+              )}
+            </button>
           </div>
+
+          {verifyError && (
+            <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-2 animate-fadeIn">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              {verifyError}
+            </div>
+          )}
+
+          {verifyResult && (
+            <div className={`p-5 rounded-2xl border animate-fadeIn space-y-4 ${
+              verifyResult.is_matching
+                ? 'bg-emerald-50/30 border-emerald-200 text-emerald-950'
+                : 'bg-rose-50/30 border-rose-200 text-rose-950'
+            }`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  verifyResult.is_matching ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
+                }`}>
+                  {verifyResult.is_matching ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm">
+                    {verifyResult.is_matching
+                      ? 'Xác minh tính toàn vẹn thành công'
+                      : 'CẢNH BÁO: Phát hiện sai lệch dữ liệu!'}
+                  </h4>
+                  <p className="text-xs text-text-secondary leading-relaxed">
+                    {verifyResult.is_matching
+                      ? 'Tập tin lưu trên máy chủ hoàn toàn trùng khớp với chữ ký số (Hash) được đăng ký trên Blockchain Polygon. Dữ liệu của bạn chưa từng bị chỉnh sửa.'
+                      : 'Mã SHA-256 của tập tin hiện tại không khớp với mã băm đã đăng ký trên hợp đồng thông minh. Dữ liệu có thể đã bị can thiệp trái phép!'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Hash Details */}
+              <div className="bg-white border border-gray-100 rounded-xl p-3.5 space-y-2.5 text-xs font-mono">
+                <div>
+                  <span className="text-[10px] text-text-secondary block font-sans font-semibold uppercase">Mã băm hiện tại (Server File Hash)</span>
+                  <span className="text-text-primary break-all">{verifyResult.local_hash}</span>
+                </div>
+                <div className="border-t border-gray-100 pt-2.5">
+                  <span className="text-[10px] text-text-secondary block font-sans font-semibold uppercase">Mã băm gốc (On-Chain Blockchain Hash)</span>
+                  <span className={`break-all ${verifyResult.is_matching ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold animate-pulse'}`}>
+                    {verifyResult.on_chain_hash}
+                  </span>
+                </div>
+                <div className="border-t border-gray-100 pt-2.5 flex flex-wrap gap-x-6 gap-y-2 text-text-secondary font-sans">
+                  <div className="min-w-[120px]">
+                    <span className="text-[10px] block font-semibold uppercase">Đăng ký bởi</span>
+                    <span className="font-mono text-[10px] text-text-primary break-all">{verifyResult.registered_by}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] block font-semibold uppercase">Thời điểm ghi nhận</span>
+                    <span className="text-[10px] text-text-primary">
+                      {verifyResult.timestamp > 0 ? new Date(verifyResult.timestamp * 1000).toLocaleString('vi-VN') : '—'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] block font-semibold uppercase">Mạng lưới</span>
+                    <span className="text-[10px] text-text-primary font-medium">
+                      {verifyResult.blockchain_connected ? 'Polygon (Mainnet)' : 'Polygon Sandbox (Local Fallback)'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI Analysis Section */}

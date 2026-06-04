@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Profile } from '@/lib/types';
 
@@ -30,6 +30,7 @@ interface AuthContextType {
   updatePassword: (password: string) => Promise<{ error: string | null }>;
   updateProfile: (data: Partial<Profile>) => Promise<{ error: string | null }>;
   refreshProfile: () => Promise<void>;
+  showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
 }
 
 interface SignUpData {
@@ -42,6 +43,7 @@ interface SignUpData {
   role?: 'patient' | 'doctor';
   specialty?: string;
   hospital?: string;
+  licenseNumber?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -51,7 +53,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'warning' | 'info' } | null>(null);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
   const router = useRouter();
+
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+    }
+    setToast({ message, type });
+    toastTimerRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 3000);
+  }, []);
 
   const fetchProfile = useCallback(async () => {
     try {
@@ -113,7 +128,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(data.profile as Profile);
       setSession({ access_token: data.access_token, user: userData });
       
-      router.push('/dashboard');
+      showToast('Đăng nhập thành công!', 'success');
+      if (data.profile?.role === 'doctor') {
+        router.push('/dashboard/doctor');
+      } else {
+        router.push('/dashboard');
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Lỗi mạng khi kết nối máy chủ.' };
@@ -156,7 +176,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(data.profile as Profile);
       setSession({ access_token: data.access_token, user: userData });
       
-      router.push('/dashboard');
+      showToast('Đăng nhập thành công!', 'success');
+      if (data.profile?.role === 'doctor') {
+        router.push('/dashboard/doctor');
+      } else {
+        router.push('/dashboard');
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Lỗi kết nối xác thực.' };
@@ -184,6 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role: data.role || 'patient',
           specialty: data.specialty || null,
           hospital: data.hospital || null,
+          license_number: data.licenseNumber || null,
         }),
       });
 
@@ -194,7 +220,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Automatically fetch profile after successful signup
       await fetchProfile();
-      router.push('/dashboard');
+      showToast('Đăng ký tài khoản thành công!', 'success');
+      if (data.role === 'doctor') {
+        router.push('/dashboard/doctor');
+      } else {
+        router.push('/dashboard');
+      }
       return { error: null };
     } catch (err: any) {
       return { error: err.message || 'Lỗi mạng khi kết nối máy chủ.' };
@@ -210,6 +241,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    showToast('Đăng xuất thành công!', 'success');
     router.push('/auth/login');
   };
 
@@ -273,9 +305,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatePassword,
         updateProfile,
         refreshProfile,
+        showToast,
       }}
     >
       {children}
+      {toast && (
+        <div className="fixed top-5 right-5 z-[9999] animate-slideDown max-w-sm w-full bg-white rounded-2xl shadow-2xl border border-border p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+              toast.type === 'success' ? 'bg-emerald-100 text-emerald-600' :
+              toast.type === 'error' ? 'bg-danger-light/20 text-danger' :
+              toast.type === 'warning' ? 'bg-amber-100 text-amber-600' :
+              'bg-blue-100 text-blue-600'
+            }`}>
+              {toast.type === 'success' && (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              {toast.type === 'error' && (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              )}
+              {toast.type === 'warning' && (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
+              {toast.type === 'info' && (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm font-semibold text-text-primary truncate">{toast.message}</span>
+          </div>
+          <button 
+            onClick={() => {
+              setToast(null);
+              if (toastTimerRef.current) {
+                clearTimeout(toastTimerRef.current);
+                toastTimerRef.current = null;
+              }
+            }}
+            className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-text-secondary hover:text-text-primary transition-colors flex-shrink-0"
+            aria-label="Đóng thông báo"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

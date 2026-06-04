@@ -91,3 +91,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+
+# Local uploads folder
+backend/app/uploads/
+

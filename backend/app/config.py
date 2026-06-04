@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     BLOCKCHAIN_PRIVATE_KEY: str = ""
     CONTRACT_ADDRESS: str = "0x5FbDB2315678afecb367f032d93F642f64180aa3"
 
+    # AI settings
+    GROQ_API_KEY: str = ""
+
+    # Cloudinary settings
+    CLOUDINARY_CLOUD_NAME: str = ""
+    CLOUDINARY_API_KEY: str = ""
+    CLOUDINARY_API_SECRET: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()

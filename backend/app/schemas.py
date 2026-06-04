@@ -52,6 +52,10 @@ class ProfileResponse(BaseModel):
     hospital: Optional[str] = None
     license_number: Optional[str] = None
     is_verified: bool = False
+    certificate_url: Optional[str] = None
+    certificate_name: Optional[str] = None
+    verification_status: Optional[str] = "unverified"
+    verification_feedback: Optional[str] = None
     two_factor_enabled: bool
     passkey_enabled: bool
     language: str
