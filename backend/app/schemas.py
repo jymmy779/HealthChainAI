@@ -225,3 +225,17 @@ class ReminderResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Chatbot
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+class RecordChatRequest(BaseModel):
+    question: str
+    history: Optional[List[ChatMessage]] = []
+
+class RecordChatResponse(BaseModel):
+    answer: str
+

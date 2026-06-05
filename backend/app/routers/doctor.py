@@ -181,13 +181,11 @@ def get_patient_record_file(
         if str(record_id) not in allowed:
             raise HTTPException(status_code=403, detail="Hồ sơ này không nằm trong phạm vi quyền truy cập.")
 
-    # Tìm file trong uploads
-    UPLOAD_DIR = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads"
-    )
-    file_path = os.path.join(UPLOAD_DIR, f"{record_id}.pdf")
+    # Tìm file trong uploads (tự động khôi phục từ IPFS nếu mất bản sao cục bộ)
+    from .records import ensure_local_file
+    file_path = ensure_local_file(record)
 
-    if not os.path.exists(file_path):
+    if not file_path or not os.path.exists(file_path):
         raise HTTPException(
             status_code=404,
             detail="File hồ sơ không tồn tại trên server. Tài liệu có thể chỉ lưu trên IPFS."

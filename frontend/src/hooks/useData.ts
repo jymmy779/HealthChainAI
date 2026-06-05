@@ -21,7 +21,10 @@ export function useHealthMetrics() {
   const [loading, setLoading] = useState(true);
 
   const fetchMetrics = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/metrics');
@@ -71,7 +74,10 @@ export function useHealthRecords() {
   const [loading, setLoading] = useState(true);
 
   const fetchRecords = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/records');
@@ -171,7 +177,10 @@ export function useAccessPermissions() {
   const [loading, setLoading] = useState(true);
 
   const fetchPermissions = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/permissions');
@@ -247,7 +256,10 @@ export function useAccessLogs() {
   const [loading, setLoading] = useState(true);
 
   const fetchLogs = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/logs');
@@ -279,7 +291,10 @@ export function useNotifications() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchNotifs = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/notifications');
@@ -334,7 +349,10 @@ export function useReminders() {
   const [loading, setLoading] = useState(true);
 
   const fetchReminders = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/reminders');
@@ -445,7 +463,10 @@ export function useAIPredictions() {
   const [loading, setLoading] = useState(true);
 
   const fetchPredictions = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/metrics/predictions');

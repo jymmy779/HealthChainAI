@@ -16,6 +16,59 @@ router = APIRouter()
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+def ensure_local_file(record: models.HealthRecord) -> str:
+    """
+    Tự động kiểm tra file PDF cục bộ trong UPLOAD_DIR.
+    Nếu thiếu và có link online (IPFS), tải xuống từ IPFS và lưu cục bộ.
+    Nếu thất bại hoặc không có link, dùng file mẫu sample_medical_report.pdf làm fallback.
+    Trả về đường dẫn file cục bộ hoặc None nếu hoàn toàn thất bại.
+    """
+    file_path = os.path.join(UPLOAD_DIR, f"{record.id}.pdf")
+    if os.path.exists(file_path):
+        return file_path
+
+    if record.file_url:
+        try:
+            print(f"File {record.id}.pdf is missing locally. Restoring from IPFS: {record.file_url}")
+            response = requests.get(record.file_url, timeout=15)
+            if response.status_code == 200:
+                with open(file_path, "wb") as f:
+                    f.write(response.content)
+                print(f"Successfully restored file {record.id}.pdf from IPFS.")
+                return file_path
+            else:
+                print(f"Failed to fetch file from IPFS, status code: {response.status_code}")
+        except Exception as e:
+            print(f"Error restoring file {record.id}.pdf from IPFS: {e}")
+
+    # Mức độ ưu tiên các phương án Fallback khi tải online thất bại:
+    # 1. File mau_bao_cao_benh_ly.pdf trong uploads (do người dùng copy thủ công)
+    fallback_user_pdf = os.path.join(UPLOAD_DIR, "mau_bao_cao_benh_ly.pdf")
+    if os.path.exists(fallback_user_pdf):
+        print(f"Using fallback user PDF: {fallback_user_pdf}")
+        return fallback_user_pdf
+
+    # 2. File sample_medical_report.pdf ở thư mục gốc
+    root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    fallback_pdf = os.path.join(root_dir, "sample_medical_report.pdf")
+    if os.path.exists(fallback_pdf):
+        print(f"Using fallback default PDF for record {record.id}: {fallback_pdf}")
+        return fallback_pdf
+
+    # 3. Bất kỳ file .pdf nào tìm thấy trong uploads
+    try:
+        for f in os.listdir(UPLOAD_DIR):
+            if f.endswith(".pdf"):
+                any_pdf = os.path.join(UPLOAD_DIR, f)
+                print(f"Using fallback any PDF found in uploads: {any_pdf}")
+                return any_pdf
+    except Exception:
+        pass
+
+    return None
+
+
+
 @router.get("", response_model=List[schemas.HealthRecordResponse])
 def get_records(current_user: models.User = Depends(auth.require_patient), db: Session = Depends(get_db)):
     records = db.query(models.HealthRecord).filter(
@@ -201,20 +254,12 @@ def analyze_record(
         raise HTTPException(status_code=404, detail="Health record not found")
 
     # 2. Find PDF file
-    file_path = os.path.join(UPLOAD_DIR, f"{record_id}.pdf")
-    
-    # Fallback to the root sample_medical_report.pdf for testing/demo
-    if not os.path.exists(file_path):
-        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        fallback_pdf = os.path.join(root_dir, "sample_medical_report.pdf")
-        if os.path.exists(fallback_pdf):
-            file_path = fallback_pdf
-            print(f"File {record_id}.pdf not found. Using fallback: {fallback_pdf}")
-        else:
-            raise HTTPException(
-                status_code=404, 
-                detail="Không tìm thấy file PDF hồ sơ và file mẫu để phân tích."
-            )
+    file_path = ensure_local_file(record)
+    if not file_path or not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=404, 
+            detail="Không tìm thấy file PDF hồ sơ và file mẫu để phân tích."
+        )
 
     # 3. Extract text from PDF using pypdf
     try:
@@ -349,21 +394,42 @@ def analyze_record(
 @router.get("/{record_id}/file")
 def get_record_file(
     record_id: uuid.UUID,
-    current_user: models.User = Depends(auth.require_patient),
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db)
 ):
     from fastapi.responses import FileResponse
     
-    # Verify record exists and belongs to user
-    record = db.query(models.HealthRecord).filter(
-        models.HealthRecord.id == record_id,
-        models.HealthRecord.user_id == current_user.id
-    ).first()
+    # Verify record exists
+    record = db.query(models.HealthRecord).filter(models.HealthRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Health record not found")
 
-    file_path = os.path.join(UPLOAD_DIR, f"{record_id}.pdf")
-    if not os.path.exists(file_path):
+    # Check access permissions: patient owner or authorized doctor
+    is_owner = (record.user_id == current_user.id)
+    is_authorized_doctor = False
+    
+    if not is_owner and current_user.profile and current_user.profile.role == "doctor":
+        # Check active permission for this patient
+        perm = db.query(models.AccessPermission).filter(
+            models.AccessPermission.patient_id == record.user_id,
+            models.AccessPermission.doctor_id == current_user.id,
+            models.AccessPermission.status == "active"
+        ).first()
+        if perm:
+            if perm.access_level == "all":
+                is_authorized_doctor = True
+            elif perm.access_level == "limited" and perm.limited_records:
+                if str(record_id) in perm.limited_records or record_id in perm.limited_records:
+                    is_authorized_doctor = True
+            elif perm.access_level == "single" and perm.single_record == str(record_id):
+                is_authorized_doctor = True
+
+    if not is_owner and not is_authorized_doctor:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập file hồ sơ này.")
+
+    # Self-healing file restoration from IPFS
+    file_path = ensure_local_file(record)
+    if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Không tìm thấy file tài liệu trên server")
 
     # Set media type
@@ -371,10 +437,13 @@ def get_record_file(
     if record.type == "hinh-anh":
         media_type = "image/jpeg"
 
+    # Clean file name for Content-Disposition header
+    safe_name = record.name.replace('"', '').replace("'", "")
+
     return FileResponse(
         file_path,
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{record.name}.pdf"'}
+        headers={"Content-Disposition": f'inline; filename="{safe_name}.pdf"'}
     )
 
 @router.get("/{record_id}/verify")
@@ -393,7 +462,7 @@ def verify_record(
     
     # 3. If not owner, check if current user is an authorized doctor
     is_authorized_doctor = False
-    if not is_owner and current_user.role == "doctor":
+    if not is_owner and current_user.profile and current_user.profile.role == "doctor":
         # Check active permission for this patient
         perm = db.query(models.AccessPermission).filter(
             models.AccessPermission.patient_id == record.user_id,
@@ -413,9 +482,9 @@ def verify_record(
         raise HTTPException(status_code=403, detail="Permission denied to access this health record")
 
     # 4. Compute local SHA-256 hash of the file
-    file_path = os.path.join(UPLOAD_DIR, f"{record_id}.pdf")
+    file_path = ensure_local_file(record)
     local_hash = None
-    if os.path.exists(file_path):
+    if file_path and os.path.exists(file_path):
         try:
             with open(file_path, "rb") as f:
                 content = f.read()
@@ -451,7 +520,7 @@ def verify_record(
         is_matching = True
         
     return {
-        "record_id": str(record.id),
+        "record_id": str(record_id),
         "record_name": record.name,
         "local_hash": local_hash,
         "on_chain_hash": on_chain_hash,
@@ -461,5 +530,266 @@ def verify_record(
         "is_matching": is_matching,
         "blockchain_connected": (blockchain_data is not None)
     }
+
+
+def call_groq_chat(
+    system_prompt: str,
+    history: List[schemas.ChatMessage],
+    question: str,
+    api_key: str
+) -> str:
+    import json
+    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    messages = [
+        {"role": "system", "content": system_prompt}
+    ]
+    
+    # Add history
+    for msg in history:
+        messages.append({
+            "role": msg.role,
+            "content": msg.content
+        })
+        
+    # Add current question
+    messages.append({
+        "role": "user",
+        "content": question
+    })
+    
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": 1024
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        if response.status_code == 200:
+            res_data = response.json()
+            return res_data["choices"][0]["message"]["content"]
+        else:
+            print(f"Groq API Error: {response.text}")
+            return "Xin lỗi, trợ lý AI đang gặp sự cố kết nối dịch vụ. Vui lòng thử lại sau."
+    except Exception as e:
+        print(f"Error calling Groq Chat API: {e}")
+        return "Xin lỗi, đã xảy ra lỗi kết nối với máy chủ AI."
+
+
+@router.post("/profile/chat", response_model=schemas.RecordChatResponse)
+def chat_about_my_profile(
+    payload: schemas.RecordChatRequest,
+    current_user: models.User = Depends(auth.require_patient),
+    db: Session = Depends(get_db)
+):
+    profile = db.query(models.Profile).filter(models.Profile.id == current_user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile.")
+
+    # Calculate age
+    age_str = "N/A"
+    if profile.date_of_birth:
+        today = date.today()
+        age_str = str(today.year - profile.date_of_birth.year - (
+            (today.month, today.day) < (profile.date_of_birth.month, profile.date_of_birth.day)
+        ))
+
+    allergies_str = ", ".join(profile.allergies) if profile.allergies else "Không có"
+    chronic_str = ", ".join(profile.chronic_diseases) if profile.chronic_diseases else "Không có"
+
+    system_prompt = (
+        "Bạn là trợ lý sức khỏe AI thân thiện, chuyên nghiệp, hỗ trợ Bệnh nhân đọc hiểu và tư vấn lối sống dựa trên thông tin cá nhân của họ.\n"
+        f"Thông tin sức khỏe hiện tại của bệnh nhân:\n"
+        f"- Tên: {profile.full_name}\n"
+        f"- Tuổi: {age_str}\n"
+        f"- Chiều cao: {profile.height or 'N/A'} cm, Cân nặng: {profile.weight or 'N/A'} kg\n"
+        f"- Nhóm máu: {profile.blood_group or 'N/A'}\n"
+        f"- Tiền sử dị ứng: {allergies_str}\n"
+        f"- Bệnh lý mãn tính: {chronic_str}\n\n"
+        "Hãy đưa ra lời khuyên y khoa cơ bản, giải thích rõ ràng và khuyên bệnh nhân chế độ dinh dưỡng, vận động lành mạnh.\n"
+        "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời nhắc bệnh nhân cần tham vấn bác sĩ khi đưa ra quyết định y tế.\n"
+        "Hãy trả lời bằng tiếng Việt."
+    )
+
+    if not settings.GROQ_API_KEY:
+        answer = f"Đây là câu trả lời thử nghiệm tư vấn sức khỏe tổng quát (Chưa cấu hình GROQ_API_KEY). Câu hỏi của bạn là: '{payload.question}'"
+    else:
+        answer = call_groq_chat(
+            system_prompt=system_prompt,
+            history=payload.history,
+            question=payload.question,
+            api_key=settings.GROQ_API_KEY
+        )
+
+    return {"answer": answer}
+
+
+@router.post("/patient/{patient_id}/chat", response_model=schemas.RecordChatResponse)
+def chat_about_patient_profile(
+    patient_id: uuid.UUID,
+    payload: schemas.RecordChatRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not current_user.profile or current_user.profile.role != "doctor":
+        raise HTTPException(status_code=403, detail="Chỉ bác sĩ mới có quyền truy cập.")
+
+    # Verify active permission for this patient
+    perm = db.query(models.AccessPermission).filter(
+        models.AccessPermission.patient_id == patient_id,
+        models.AccessPermission.doctor_id == current_user.id,
+        models.AccessPermission.status == "active"
+    ).first()
+    if not perm:
+        raise HTTPException(status_code=403, detail="Bệnh nhân chưa cấp quyền truy cập cho bạn.")
+
+    profile = db.query(models.Profile).filter(models.Profile.id == patient_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Không tìm thấy profile bệnh nhân.")
+
+    # Calculate age
+    age_str = "N/A"
+    if profile.date_of_birth:
+        today = date.today()
+        age_str = str(today.year - profile.date_of_birth.year - (
+            (today.month, today.day) < (profile.date_of_birth.month, profile.date_of_birth.day)
+        ))
+
+    allergies_str = ", ".join(profile.allergies) if profile.allergies else "Không có"
+    chronic_str = ", ".join(profile.chronic_diseases) if profile.chronic_diseases else "Không có"
+
+    system_prompt = (
+        "Bạn là trợ lý y khoa AI cao cấp, hỗ trợ Bác sĩ phân tích thông tin sức khỏe tổng quát của bệnh nhân.\n"
+        f"Thông tin sức khỏe hiện tại của bệnh nhân:\n"
+        f"- Tên: {profile.full_name}\n"
+        f"- Tuổi: {age_str}\n"
+        f"- Chiều cao: {profile.height or 'N/A'} cm, Cân nặng: {profile.weight or 'N/A'} kg\n"
+        f"- Nhóm máu: {profile.blood_group or 'N/A'}\n"
+        f"- Tiền sử dị ứng: {allergies_str}\n"
+        f"- Bệnh lý mãn tính: {chronic_str}\n\n"
+        "Hãy đưa ra các lập luận lâm sàng, đề xuất chẩn đoán hoặc cận lâm sàng cần thiết.\n"
+        "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời.\n"
+        "Hãy trả lời bằng tiếng Việt."
+    )
+
+    if not settings.GROQ_API_KEY:
+        answer = f"Đây là câu trả lời thử nghiệm y khoa cho bác sĩ (Chưa cấu hình GROQ_API_KEY). Câu hỏi của bạn là: '{payload.question}'"
+    else:
+        answer = call_groq_chat(
+            system_prompt=system_prompt,
+            history=payload.history,
+            question=payload.question,
+            api_key=settings.GROQ_API_KEY
+        )
+
+    return {"answer": answer}
+
+
+@router.post("/{record_id}/chat", response_model=schemas.RecordChatResponse)
+def chat_about_record(
+    record_id: uuid.UUID,
+    payload: schemas.RecordChatRequest,
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 1. Fetch record
+    record = db.query(models.HealthRecord).filter(models.HealthRecord.id == record_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Không tìm thấy hồ sơ sức khỏe.")
+
+    # 2. Verify authorization (patient or authorized doctor)
+    is_owner = (record.user_id == current_user.id)
+    is_authorized_doctor = False
+    
+    if not is_owner and current_user.profile and current_user.profile.role == "doctor":
+        # Check active permission for this patient
+        perm = db.query(models.AccessPermission).filter(
+            models.AccessPermission.patient_id == record.user_id,
+            models.AccessPermission.doctor_id == current_user.id,
+            models.AccessPermission.status == "active"
+        ).first()
+        if perm:
+            if perm.access_level == "all":
+                is_authorized_doctor = True
+            elif perm.access_level == "limited" and perm.limited_records:
+                if str(record_id) in perm.limited_records or record_id in perm.limited_records:
+                    is_authorized_doctor = True
+            elif perm.access_level == "single" and perm.single_record == str(record_id):
+                is_authorized_doctor = True
+
+    if not is_owner and not is_authorized_doctor:
+        raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập hồ sơ này.")
+
+    # 3. Read/Extract text from PDF file
+    file_path = ensure_local_file(record)
+    record_text = ""
+
+    if file_path:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(file_path)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    record_text += page_text + "\n"
+        except Exception as e:
+            print(f"Error reading PDF for chat: {e}")
+
+    # Fallback to description and details if no PDF text extracted
+    if not record_text.strip():
+        record_text = f"Tên hồ sơ: {record.name}\nLoại: {record.type_label}\nBệnh viện: {record.hospital or 'N/A'}\nBác sĩ: {record.doctor or 'N/A'}\nMô tả: {record.description or 'N/A'}"
+
+    # 4. Define role-based System Prompt
+    if current_user.profile and current_user.profile.role == "doctor":
+        system_prompt = (
+            "Bạn là một trợ lý y khoa AI cao cấp, hỗ trợ Bác sĩ phân tích và thảo luận về hồ sơ bệnh án của bệnh nhân.\n"
+            "Hãy cung cấp các câu trả lời mang tính chuyên môn lâm sàng cao, sử dụng các thuật ngữ y học chính xác khi cần thiết.\n"
+            "Chỉ trả lời dựa trên ngữ cảnh y tế được cung cấp dưới đây. Nếu thông tin không có trong tài liệu, hãy thông báo rõ cho bác sĩ.\n"
+            "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời.\n\n"
+            f"Ngữ cảnh hồ sơ bệnh án của bệnh nhân:\n{record_text}\n\n"
+            "Hãy trả lời bằng tiếng Việt."
+        )
+    else:
+        system_prompt = (
+            "Bạn là một trợ lý sức khỏe AI thân thiện và chuyên nghiệp, hỗ trợ Bệnh nhân đọc hiểu hồ sơ bệnh án của chính họ.\n"
+            "Hãy giải thích các thuật ngữ chuyên môn phức tạp bằng ngôn ngữ giản dị, dễ hiểu, tránh gây hoang mang cho người bệnh.\n"
+            "Chỉ trả lời dựa trên ngữ cảnh y tế được cung cấp dưới đây. Hướng dẫn bệnh nhân về chế độ dinh dưỡng, lối sống lành mạnh nếu phù hợp.\n"
+            "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời nhắc bệnh nhân cần tham vấn bác sĩ khi đưa ra quyết định y tế.\n\n"
+            f"Ngữ cảnh hồ sơ bệnh án của bệnh nhân:\n{record_text}\n\n"
+            "Hãy trả lời bằng tiếng Việt."
+        )
+
+    # 5. Call Groq
+    if not settings.GROQ_API_KEY:
+        # Mock reply if API key is not configured
+        mock_replies = {
+            "tóm tắt": "Đây là tóm tắt hồ sơ sức khỏe y tế giả lập. Chỉ số Glucose và Huyết áp nằm trong phạm vi bình thường.",
+            "chỉ số": "Dữ liệu y tế giả lập cho thấy Huyết áp của bạn ổn định 120/80 mmHg, Nhịp tim 75 bpm.",
+            "default": f"Đây là câu trả lời thử nghiệm từ trợ lý AI HealthChain. (Chưa cấu hình GROQ_API_KEY). Câu hỏi của bạn là: '{payload.question}'"
+        }
+        q_lower = payload.question.lower()
+        answer = mock_replies.get("default")
+        for k, v in mock_replies.items():
+            if k in q_lower:
+                answer = v
+                break
+    else:
+        answer = call_groq_chat(
+            system_prompt=system_prompt,
+            history=payload.history,
+            question=payload.question,
+            api_key=settings.GROQ_API_KEY
+        )
+
+    return {"answer": answer}
+
+
 
 
