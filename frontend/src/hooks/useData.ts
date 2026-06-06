@@ -381,7 +381,10 @@ export function useReminders() {
       });
       const resData = await res.json();
       if (!res.ok) {
-        return { error: resData.detail || 'Lỗi thêm nhắc nhở.' };
+        const errorDetail = typeof resData.detail === 'object'
+          ? JSON.stringify(resData.detail)
+          : resData.detail;
+        return { error: errorDetail || 'Lỗi thêm nhắc nhở.' };
       }
       await fetchReminders();
       return { error: null };
@@ -399,7 +402,10 @@ export function useReminders() {
       });
       const resData = await res.json();
       if (!res.ok) {
-        return { error: resData.detail || 'Lỗi cập nhật nhắc nhở.' };
+        const errorDetail = typeof resData.detail === 'object'
+          ? JSON.stringify(resData.detail)
+          : resData.detail;
+        return { error: errorDetail || 'Lỗi cập nhật nhắc nhở.' };
       }
       await fetchReminders();
       return { error: null };
@@ -415,7 +421,10 @@ export function useReminders() {
       });
       const resData = await res.json();
       if (!res.ok) {
-        return { error: resData.detail || 'Lỗi xóa nhắc nhở.' };
+        const errorDetail = typeof resData.detail === 'object'
+          ? JSON.stringify(resData.detail)
+          : resData.detail;
+        return { error: errorDetail || 'Lỗi xóa nhắc nhở.' };
       }
       await fetchReminders();
       return { error: null };

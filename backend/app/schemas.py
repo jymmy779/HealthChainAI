@@ -1,6 +1,6 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Dict, Any
-from datetime import date, datetime
+from datetime import date as dt_date, datetime
 from uuid import UUID
 
 # Token
@@ -18,11 +18,18 @@ class UserRegister(BaseModel):
     fullName: str
     role: str = "patient" # "patient" or "doctor"
     phone: Optional[str] = None
-    dateOfBirth: Optional[date] = None
+    dateOfBirth: Optional[dt_date] = None
     gender: Optional[str] = None
     specialty: Optional[str] = None
     hospital: Optional[str] = None
     license_number: Optional[str] = None  # Số chứng chỉ hành nghề
+
+    @field_validator('dateOfBirth', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 class UserLogin(BaseModel):
     email: EmailStr
@@ -37,7 +44,7 @@ class ProfileResponse(BaseModel):
     full_name: str
     phone: Optional[str] = None
     email: Optional[str] = None
-    date_of_birth: Optional[date] = None
+    date_of_birth: Optional[dt_date] = None
     gender: Optional[str] = None
     blood_group: Optional[str] = None
     height: Optional[float] = None
@@ -68,7 +75,7 @@ class ProfileResponse(BaseModel):
 class ProfileUpdate(BaseModel):
     full_name: Optional[str] = None
     phone: Optional[str] = None
-    date_of_birth: Optional[date] = None
+    date_of_birth: Optional[dt_date] = None
     gender: Optional[str] = None
     blood_group: Optional[str] = None
     height: Optional[float] = None
@@ -82,9 +89,16 @@ class ProfileUpdate(BaseModel):
     hospital: Optional[str] = None
     license_number: Optional[str] = None
 
+    @field_validator('date_of_birth', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
+
 # Health Metric
 class HealthMetricCreate(BaseModel):
-    date: date
+    date: dt_date
     bmi: Optional[float] = None
     systolic: Optional[int] = None
     diastolic: Optional[int] = None
@@ -95,7 +109,7 @@ class HealthMetricCreate(BaseModel):
 class HealthMetricResponse(BaseModel):
     id: UUID
     user_id: UUID
-    date: date
+    date: dt_date
     bmi: Optional[float] = None
     systolic: Optional[int] = None
     diastolic: Optional[int] = None
@@ -115,7 +129,7 @@ class HealthRecordCreate(BaseModel):
     description: Optional[str] = None
     file_url: Optional[str] = None
     file_size: Optional[str] = None
-    date: date
+    date: dt_date
     hospital: Optional[str] = None
     doctor: Optional[str] = None
     transaction_hash: Optional[str] = None
@@ -130,7 +144,7 @@ class HealthRecordResponse(BaseModel):
     description: Optional[str] = None
     file_url: Optional[str] = None
     file_size: Optional[str] = None
-    date: date
+    date: dt_date
     hospital: Optional[str] = None
     doctor: Optional[str] = None
     transaction_hash: Optional[str] = None
@@ -146,7 +160,7 @@ class HealthRecordResponse(BaseModel):
 # Access Permission
 class AccessPermissionCreate(BaseModel):
     doctor_id: UUID
-    expiry_date: date
+    expiry_date: dt_date
     access_level: str = "all" # "all", "limited", "single"
     limited_records: Optional[List[UUID]] = None
 
@@ -154,8 +168,8 @@ class AccessPermissionResponse(BaseModel):
     id: UUID
     patient_id: UUID
     doctor_id: UUID
-    granted_date: date
-    expiry_date: date
+    granted_date: dt_date
+    expiry_date: dt_date
     status: str
     access_level: str
     limited_records: Optional[List[UUID]] = None
@@ -208,8 +222,15 @@ class ReminderCreate(BaseModel):
     description: Optional[str] = None
     type: str = "daily"
     time: str
-    date: Optional[date] = None
+    date: Optional[dt_date] = None
     is_active: bool = True
+
+    @field_validator('date', mode='before')
+    @classmethod
+    def empty_str_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 class ReminderResponse(BaseModel):
     id: UUID
@@ -218,7 +239,7 @@ class ReminderResponse(BaseModel):
     description: Optional[str] = None
     type: str
     time: str
-    date: Optional[date] = None
+    date: Optional[dt_date] = None
     is_active: bool
     last_notified: Optional[datetime] = None
     created_at: datetime

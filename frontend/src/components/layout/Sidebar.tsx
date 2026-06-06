@@ -147,7 +147,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     pathname === item.link ||
                     (item.link !== '/dashboard' &&
                      item.link !== '/dashboard/doctor' &&
-                     pathname.startsWith(item.link + '/'));
+                     pathname.startsWith(item.link + '/') &&
+                     !(item.link === '/dashboard/records' && pathname.startsWith('/dashboard/records/upload')) &&
+                     !(item.link === '/dashboard/access' && pathname.startsWith('/dashboard/access/history')));
 
                   const Icon = ({ className }: { className?: string }) => (
                     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
