@@ -343,93 +343,117 @@ export default function RecordDetailPage() {
 
         {/* AI Analysis Section */}
         <div className="px-6 pb-6">
-          <div className="bg-gradient-to-r from-primary-light/50 to-secondary-light/30 border border-primary/20 rounded-2xl p-5 relative overflow-hidden">
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                  <span className="flex h-2.5 w-2.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-                  </span>
-                  <h3 className="text-base font-bold text-text-primary">Trợ lý Phân tích Y khoa AI</h3>
-                  {record.metric_id && (
-                    <span className="px-2 py-0.5 text-[10px] font-bold bg-secondary-light text-secondary border border-secondary/20 rounded-md animate-fadeIn">
-                      Đã phân tích
+          {record.type === 'xet-nghiem-mau' ? (
+            /* Chỉ hiện phân tích chỉ số cho xét nghiệm máu */
+            <div className="bg-gradient-to-r from-primary-light/50 to-secondary-light/30 border border-primary/20 rounded-2xl p-5 relative overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className="flex h-2.5 w-2.5 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
                     </span>
-                  )}
+                    <h3 className="text-base font-bold text-text-primary">Trợ lý Phân tích Y khoa AI</h3>
+                    {record.metric_id && (
+                      <span className="px-2 py-0.5 text-[10px] font-bold bg-secondary-light text-secondary border border-secondary/20 rounded-md animate-fadeIn">
+                        Đã phân tích
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-text-secondary">
+                    Tự động quét tài liệu để trích xuất các chỉ số sinh hóa (Đường huyết, Huyết áp, Nhịp tim, BMI) và chạy mô hình dự báo nguy cơ sức khỏe.
+                  </p>
                 </div>
-                <p className="text-sm text-text-secondary">
-                  Tự động quét tài liệu PDF này để trích xuất các chỉ số sinh hóa (Đường huyết, Huyết áp, Nhịp tim, BMI) và chạy mô hình dự báo nguy cơ sức khỏe.
-                </p>
+                <button
+                  onClick={handleAIAnalyze}
+                  disabled={analyzing}
+                  className="py-3 px-5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 flex-shrink-0 disabled:opacity-50 cursor-pointer"
+                >
+                  {analyzing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      <span>Đang phân tích...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      <span>{record.metric_id ? "Cập nhật phân tích" : "Phân tích chỉ số ngay"}</span>
+                    </>
+                  )}
+                </button>
               </div>
-              <button
-                onClick={handleAIAnalyze}
-                disabled={analyzing}
-                className="py-3 px-5 bg-gradient-to-r from-primary to-primary-dark text-white rounded-xl font-semibold text-sm hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center justify-center gap-2 flex-shrink-0 disabled:opacity-50 cursor-pointer"
-              >
-                {analyzing ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    <span>Đang phân tích...</span>
-                  </>
-                ) : (
-                  <>
+              {analysisResult && (
+                <div className="mt-4 p-4 bg-white/85 rounded-xl border border-white/45 space-y-2 animate-fadeIn">
+                  <p className="text-xs font-semibold text-secondary flex items-center gap-1">
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                     </svg>
-                    <span>{record.metric_id ? "Cập nhật phân tích" : "Phân tích chỉ số ngay"}</span>
-                  </>
-                )}
-              </button>
+                    {analysisResult.message}
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                    {analysisResult.extracted_data.blood_sugar && (
+                      <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                        <span className="text-[10px] text-text-secondary block">Đường huyết</span>
+                        <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.blood_sugar} <span className="text-[10px] font-normal">mg/dL</span></span>
+                      </div>
+                    )}
+                    {analysisResult.extracted_data.systolic && (
+                      <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                        <span className="text-[10px] text-text-secondary block">Huyết áp</span>
+                        <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.systolic}/{analysisResult.extracted_data.diastolic} <span className="text-[10px] font-normal">mmHg</span></span>
+                      </div>
+                    )}
+                    {analysisResult.extracted_data.heart_rate && (
+                      <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                        <span className="text-[10px] text-text-secondary block">Nhịp tim</span>
+                        <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.heart_rate} <span className="text-[10px] font-normal">bpm</span></span>
+                      </div>
+                    )}
+                    {analysisResult.extracted_data.bmi && (
+                      <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
+                        <span className="text-[10px] text-text-secondary block">BMI</span>
+                        <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.bmi} <span className="text-[10px] font-normal">kg/m²</span></span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-2 flex justify-end">
+                    <button
+                      onClick={() => router.push(`/dashboard/ai/report?metric_id=${analysisResult.metric_id}`)}
+                      className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Xem báo cáo phân tích chi tiết AI &rarr;</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-            {analysisResult && (
-              <div className="mt-4 p-4 bg-white/85 rounded-xl border border-white/45 space-y-2 animate-fadeIn">
-                <p className="text-xs font-semibold text-secondary flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  {analysisResult.message}
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                  {analysisResult.extracted_data.blood_sugar && (
-                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-text-secondary block">Đường huyết</span>
-                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.blood_sugar} <span className="text-[10px] font-normal">mg/dL</span></span>
-                    </div>
-                  )}
-                  {analysisResult.extracted_data.systolic && (
-                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-text-secondary block">Huyết áp</span>
-                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.systolic}/{analysisResult.extracted_data.diastolic} <span className="text-[10px] font-normal">mmHg</span></span>
-                    </div>
-                  )}
-                  {analysisResult.extracted_data.heart_rate && (
-                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-text-secondary block">Nhịp tim</span>
-                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.heart_rate} <span className="text-[10px] font-normal">bpm</span></span>
-                    </div>
-                  )}
-                  {analysisResult.extracted_data.bmi && (
-                    <div className="bg-gray-50/50 p-2.5 rounded-lg border border-gray-100">
-                      <span className="text-[10px] text-text-secondary block">BMI</span>
-                      <span className="text-sm font-bold text-text-primary">{analysisResult.extracted_data.bmi} <span className="text-[10px] font-normal">kg/m²</span></span>
-                    </div>
-                  )}
-                </div>
-                <div className="pt-2 flex justify-end">
-                  <button
-                    onClick={() => router.push(`/dashboard/ai/report?metric_id=${analysisResult.metric_id}`)}
-                    className="text-xs font-semibold text-primary hover:underline flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Xem báo cáo phân tích chi tiết AI &rarr;</span>
-                  </button>
-                </div>
+          ) : (
+            /* Loại tài liệu khác — không có chỉ số số học để phân tích */
+            <div className="bg-gray-50 border border-border rounded-2xl p-5 flex items-start gap-4">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${typeStyle.bg}`}>
+                <svg className={`w-5 h-5 ${typeStyle.text}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
               </div>
-            )}
-          </div>
+              <div>
+                <h3 className="text-sm font-bold text-text-primary mb-1">
+                  {record.type === 'hinh-anh' && 'Chẩn đoán hình ảnh — không có chỉ số sinh hóa'}
+                  {record.type === 'don-thuoc' && 'Đơn thuốc — không có chỉ số sinh hóa'}
+                  {record.type === 'bao-cao' && 'Báo cáo bác sĩ — không có chỉ số sinh hóa'}
+                </h3>
+                <p className="text-sm text-text-secondary">
+                  {record.type === 'hinh-anh' && 'Tính năng phân tích chỉ số chỉ áp dụng cho Xét nghiệm máu. Để đọc hiểu kết quả X-quang / MRI / siêu âm, hãy dùng tính năng Trợ lý Y khoa AI bên dưới.'}
+                  {record.type === 'don-thuoc' && 'Tính năng phân tích chỉ số chỉ áp dụng cho Xét nghiệm máu. Để tra cứu thuốc, liều dùng và tác dụng phụ, hãy dùng tính năng Trợ lý Y khoa AI bên dưới.'}
+                  {record.type === 'bao-cao' && 'Tính năng phân tích chỉ số chỉ áp dụng cho Xét nghiệm máu. Để đọc hiểu báo cáo bác sĩ, hãy dùng tính năng Trợ lý Y khoa AI bên dưới.'}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI Chatbot Banner */}

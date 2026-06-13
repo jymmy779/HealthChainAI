@@ -18,28 +18,40 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def ensure_local_file(record: models.HealthRecord) -> str:
     """
-    Tự động kiểm tra file PDF cục bộ trong UPLOAD_DIR.
+    Tự động kiểm tra file cục bộ trong UPLOAD_DIR (hỗ trợ pdf, jpg, jpeg, png).
     Nếu thiếu và có link online (IPFS), tải xuống từ IPFS và lưu cục bộ.
     Nếu thất bại hoặc không có link, dùng file mẫu sample_medical_report.pdf làm fallback.
     Trả về đường dẫn file cục bộ hoặc None nếu hoàn toàn thất bại.
     """
-    file_path = os.path.join(UPLOAD_DIR, f"{record.id}.pdf")
-    if os.path.exists(file_path):
-        return file_path
+    # Tìm file với tất cả các đuôi hỗ trợ (pdf, jpg, jpeg, png)
+    supported_exts = ["pdf", "jpg", "jpeg", "png"]
+    for ext in supported_exts:
+        file_path = os.path.join(UPLOAD_DIR, f"{record.id}.{ext}")
+        if os.path.exists(file_path):
+            return file_path
 
     if record.file_url:
         try:
-            print(f"File {record.id}.pdf is missing locally. Restoring from IPFS: {record.file_url}")
+            print(f"File {record.id} is missing locally. Restoring from IPFS: {record.file_url}")
             response = requests.get(record.file_url, timeout=15)
             if response.status_code == 200:
+                # Đoán extension từ content-type trả về
+                content_type = response.headers.get("content-type", "")
+                if "jpeg" in content_type or "jpg" in content_type:
+                    restore_ext = "jpg"
+                elif "png" in content_type:
+                    restore_ext = "png"
+                else:
+                    restore_ext = "pdf"
+                file_path = os.path.join(UPLOAD_DIR, f"{record.id}.{restore_ext}")
                 with open(file_path, "wb") as f:
                     f.write(response.content)
-                print(f"Successfully restored file {record.id}.pdf from IPFS.")
+                print(f"Successfully restored file {record.id}.{restore_ext} from IPFS.")
                 return file_path
             else:
                 print(f"Failed to fetch file from IPFS, status code: {response.status_code}")
         except Exception as e:
-            print(f"Error restoring file {record.id}.pdf from IPFS: {e}")
+            print(f"Error restoring file {record.id} from IPFS: {e}")
 
     # Mức độ ưu tiên các phương án Fallback khi tải online thất bại:
     # 1. File mau_bao_cao_benh_ly.pdf trong uploads (do người dùng copy thủ công)
@@ -55,13 +67,13 @@ def ensure_local_file(record: models.HealthRecord) -> str:
         print(f"Using fallback default PDF for record {record.id}: {fallback_pdf}")
         return fallback_pdf
 
-    # 3. Bất kỳ file .pdf nào tìm thấy trong uploads
+    # 3. Bất kỳ file nào tìm thấy trong uploads
     try:
         for f in os.listdir(UPLOAD_DIR):
-            if f.endswith(".pdf"):
-                any_pdf = os.path.join(UPLOAD_DIR, f)
-                print(f"Using fallback any PDF found in uploads: {any_pdf}")
-                return any_pdf
+            if any(f.endswith(f".{e}") for e in supported_exts):
+                any_file = os.path.join(UPLOAD_DIR, f)
+                print(f"Using fallback any file found in uploads: {any_file}")
+                return any_file
     except Exception:
         pass
 
@@ -99,11 +111,17 @@ async def create_record(
     file_size_str = None
     ipfs_hash = None
     file_content = None
+    file_ext = "pdf"  # default extension
 
     if file:
         file_content = await file.read()
         file_size_mb = len(file_content) / (1024 * 1024)
         file_size_str = f"{file_size_mb:.1f} MB"
+        # Lấy extension gốc của file để lưu đúng định dạng
+        if file.filename:
+            ext_raw = file.filename.rsplit(".", 1)[-1].lower()
+            if ext_raw in ["jpg", "jpeg", "png", "pdf"]:
+                file_ext = ext_raw
 
         # Check Pinata API Keys
         if settings.PINATA_API_KEY and settings.PINATA_SECRET_API_KEY:
@@ -161,7 +179,7 @@ async def create_record(
     # Save file content locally in uploads folder for AI analysis
     if file and file_content:
         try:
-            file_path = os.path.join(UPLOAD_DIR, f"{new_record.id}.pdf")
+            file_path = os.path.join(UPLOAD_DIR, f"{new_record.id}.{file_ext}")
             with open(file_path, "wb") as f:
                 f.write(file_content)
         except Exception as e:
@@ -253,25 +271,27 @@ def analyze_record(
     if not record:
         raise HTTPException(status_code=404, detail="Health record not found")
 
-    # 2. Find PDF file
+    # 2. Tìm file hồ sơ (pdf / jpg / png)
     file_path = ensure_local_file(record)
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(
-            status_code=404, 
-            detail="Không tìm thấy file PDF hồ sơ và file mẫu để phân tích."
+            status_code=404,
+            detail="Không tìm thấy file hồ sơ để phân tích."
         )
 
-    # 3. Extract text from PDF using pypdf
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(file_path)
-        text = ""
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Lỗi khi đọc file PDF: {str(e)}")
+    # 3. Trích xuất text: PDF dùng pypdf, ảnh dùng Groq Vision
+    text = extract_record_text(file_path, api_key=settings.GROQ_API_KEY)
+    if not text.strip():
+        file_ext = file_path.rsplit(".", 1)[-1].lower()
+        if file_ext in ["jpg", "jpeg", "png"] and not settings.GROQ_API_KEY:
+            raise HTTPException(
+                status_code=422,
+                detail="File ảnh cần GROQ_API_KEY để phân tích bằng AI Vision. Vui lòng cấu hình API key."
+            )
+        raise HTTPException(
+            status_code=422,
+            detail="Không thể đọc nội dung file. File có thể bị hỏng hoặc không chứa văn bản."
+        )
 
     # 4. Parse text using regex to extract indicators
     blood_sugar = None
@@ -432,19 +452,26 @@ def get_record_file(
     if not file_path or not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Không tìm thấy file tài liệu trên server")
 
-    # Set media type
-    media_type = "application/pdf"
-    if record.type == "hinh-anh":
-        media_type = "image/jpeg"
+    # Detect media_type từ extension thực của file đã lưu
+    ext = file_path.rsplit(".", 1)[-1].lower() if "." in file_path else "pdf"
+    media_type_map = {
+        "pdf":  "application/pdf",
+        "jpg":  "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png":  "image/png",
+    }
+    media_type = media_type_map.get(ext, "application/octet-stream")
 
     # Clean file name for Content-Disposition header
     safe_name = record.name.replace('"', '').replace("'", "")
+    file_ext_display = f".{ext}" if ext != "pdf" else ".pdf"
 
     return FileResponse(
         file_path,
         media_type=media_type,
-        headers={"Content-Disposition": f'inline; filename="{safe_name}.pdf"'}
+        headers={"Content-Disposition": f'inline; filename="{safe_name}{file_ext_display}"'}
     )
+
 
 @router.get("/{record_id}/verify")
 def verify_record(
@@ -530,6 +557,100 @@ def verify_record(
         "is_matching": is_matching,
         "blockchain_connected": (blockchain_data is not None)
     }
+
+
+def extract_text_from_image_groq(file_path: str, api_key: str) -> str:
+    """Dùng Groq Vision để đọc nội dung văn bản từ ảnh JPG/PNG phiếu kết quả y tế."""
+    import base64, requests as req_lib
+    try:
+        with open(file_path, "rb") as f:
+            image_bytes = f.read()
+
+        # Resize ảnh xuống max 1280px để tiết kiệm token và tăng tốc độ xử lý
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            max_dim = 1280
+            w, h = img.size
+            if max(w, h) > max_dim:
+                scale = max_dim / max(w, h)
+                img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=92)
+            image_bytes = buf.getvalue()
+            mime = "image/jpeg"
+        except ImportError:
+            ext = file_path.rsplit(".", 1)[-1].lower()
+            mime = "image/png" if ext == "png" else "image/jpeg"
+
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        image_url = f"data:{mime};base64,{b64}"
+
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Bạn là AI y tế chuyên đọc phiếu kết quả xét nghiệm / chẩn đoán hình ảnh tiếng Việt.\n"
+                                "Đây có thể là tờ giấy kết quả có chữ in hoặc phim X-quang/MRI/siêu âm.\n"
+                                "Hãy trích xuất TOÀN BỘ nội dung có thể nhận biết được từ ảnh này, bao gồm:\n"
+                                "- Nếu là phiếu kết quả in: tên bệnh nhân, ngày, tên xét nghiệm, giá trị số, đơn vị, khoảng tham chiếu, kết luận bác sĩ.\n"
+                                "- Nếu là phim X-quang/MRI/siêu âm: mô tả chi tiết những gì quan sát được (xương, cấu trúc, mật độ, bất thường nếu có).\n"
+                                "Trả về dưới dạng văn bản thuần, chi tiết và rõ ràng, bằng tiếng Việt."
+                            )
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_url}
+                        }
+                    ]
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 3000
+        }
+        response = req_lib.post(url, headers=headers, json=payload, timeout=60)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            print(f"Groq Vision error: {response.text}")
+    except Exception as e:
+        print(f"extract_text_from_image_groq error: {e}")
+    return ""
+
+
+def extract_record_text(file_path: str, api_key: str = None) -> str:
+    """Trích xuất text từ file hồ sơ: PDF dùng pypdf, ảnh dùng Groq Vision."""
+    if not file_path or not os.path.exists(file_path):
+        return ""
+    ext = file_path.rsplit(".", 1)[-1].lower()
+    if ext in ["jpg", "jpeg", "png"]:
+        if api_key:
+            return extract_text_from_image_groq(file_path, api_key)
+        return ""
+    # PDF
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(file_path)
+        text = ""
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text += page_text + "\n"
+        return text
+    except Exception as e:
+        print(f"PDF read error: {e}")
+        return ""
 
 
 def call_groq_chat(
@@ -727,44 +848,75 @@ def chat_about_record(
     if not is_owner and not is_authorized_doctor:
         raise HTTPException(status_code=403, detail="Bạn không có quyền truy cập hồ sơ này.")
 
-    # 3. Read/Extract text from PDF file
+    # 3. Trích xuất text từ file (PDF hoặc ảnh JPG/PNG qua Groq Vision)
     file_path = ensure_local_file(record)
     record_text = ""
 
     if file_path:
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(file_path)
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    record_text += page_text + "\n"
-        except Exception as e:
-            print(f"Error reading PDF for chat: {e}")
+        record_text = extract_record_text(file_path, api_key=settings.GROQ_API_KEY)
 
-    # Fallback to description and details if no PDF text extracted
+    # Fallback to description and details if no text extracted
     if not record_text.strip():
         record_text = f"Tên hồ sơ: {record.name}\nLoại: {record.type_label}\nBệnh viện: {record.hospital or 'N/A'}\nBác sĩ: {record.doctor or 'N/A'}\nMô tả: {record.description or 'N/A'}"
 
-    # 4. Define role-based System Prompt
+    # 4. Define role-based System Prompt (phân biệt theo loại hồ sơ)
+    is_imaging = record.type == "hinh-anh"
+    is_prescription = record.type == "don-thuoc"
+
     if current_user.profile and current_user.profile.role == "doctor":
-        system_prompt = (
-            "Bạn là một trợ lý y khoa AI cao cấp, hỗ trợ Bác sĩ phân tích và thảo luận về hồ sơ bệnh án của bệnh nhân.\n"
-            "Hãy cung cấp các câu trả lời mang tính chuyên môn lâm sàng cao, sử dụng các thuật ngữ y học chính xác khi cần thiết.\n"
-            "Chỉ trả lời dựa trên ngữ cảnh y tế được cung cấp dưới đây. Nếu thông tin không có trong tài liệu, hãy thông báo rõ cho bác sĩ.\n"
-            "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời.\n\n"
-            f"Ngữ cảnh hồ sơ bệnh án của bệnh nhân:\n{record_text}\n\n"
-            "Hãy trả lời bằng tiếng Việt."
-        )
+        if is_imaging:
+            system_prompt = (
+                "Bạn là trợ lý y khoa AI hỗ trợ Bác sĩ thảo luận về kết quả chẩn đoán hình ảnh (X-quang, MRI, siêu âm).\n"
+                "Hệ thống AI Vision đã phân tích ảnh và trích xuất nội dung bên dưới — đây là MÔ TẢ ảnh y tế, không phải yêu cầu bạn tự nhìn ảnh.\n"
+                "Dựa trên mô tả này, hãy hỗ trợ bác sĩ phân tích, đặt câu hỏi lâm sàng và gợi ý hướng xử lý.\n"
+                "Nếu mô tả còn mơ hồ, hãy nêu rõ giới hạn và đề xuất bác sĩ xem trực tiếp phim.\n"
+                "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn ở cuối.\n\n"
+                f"=== KẾT QUẢ PHÂN TÍCH ẢNH TỪ AI VISION ===\n{record_text}\n"
+                "===========================================\n\n"
+                "Hãy trả lời bằng tiếng Việt."
+            )
+        else:
+            system_prompt = (
+                "Bạn là một trợ lý y khoa AI cao cấp, hỗ trợ Bác sĩ phân tích và thảo luận về hồ sơ bệnh án của bệnh nhân.\n"
+                "Hãy cung cấp các câu trả lời mang tính chuyên môn lâm sàng cao, sử dụng các thuật ngữ y học chính xác khi cần thiết.\n"
+                "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời.\n\n"
+                f"=== NỘI DUNG HỒ SƠ BỆNH ÁN ===\n{record_text}\n"
+                "================================\n\n"
+                "Hãy trả lời bằng tiếng Việt."
+            )
     else:
-        system_prompt = (
-            "Bạn là một trợ lý sức khỏe AI thân thiện và chuyên nghiệp, hỗ trợ Bệnh nhân đọc hiểu hồ sơ bệnh án của chính họ.\n"
-            "Hãy giải thích các thuật ngữ chuyên môn phức tạp bằng ngôn ngữ giản dị, dễ hiểu, tránh gây hoang mang cho người bệnh.\n"
-            "Chỉ trả lời dựa trên ngữ cảnh y tế được cung cấp dưới đây. Hướng dẫn bệnh nhân về chế độ dinh dưỡng, lối sống lành mạnh nếu phù hợp.\n"
-            "Cần đính kèm cảnh báo miễn trừ trách nhiệm y tế AI ngắn gọn bằng tiếng Việt ở cuối câu trả lời nhắc bệnh nhân cần tham vấn bác sĩ khi đưa ra quyết định y tế.\n\n"
-            f"Ngữ cảnh hồ sơ bệnh án của bệnh nhân:\n{record_text}\n\n"
-            "Hãy trả lời bằng tiếng Việt."
-        )
+        if is_imaging:
+            system_prompt = (
+                "Bạn là trợ lý sức khỏe AI thân thiện, giúp Bệnh nhân hiểu kết quả chẩn đoán hình ảnh (X-quang, MRI, siêu âm).\n"
+                "QUAN TRỌNG: Hệ thống AI Vision đã phân tích ảnh và trích xuất mô tả bên dưới. Đây là NỘI DUNG ĐÃ CÓ — bạn không cần tự nhìn ảnh.\n"
+                "Nhiệm vụ của bạn: dựa trên mô tả đó, giải thích bằng ngôn ngữ đơn giản để bệnh nhân hiểu được tình trạng của họ.\n"
+                "Nếu mô tả phát hiện bất thường, hãy giải thích nhẹ nhàng và khuyến khích bệnh nhân hỏi thêm bác sĩ.\n"
+                "Cuối câu trả lời nhắc bệnh nhân tham vấn bác sĩ để có kết luận chính xác.\n\n"
+                f"=== KẾT QUẢ PHÂN TÍCH ẢNH TỪ AI VISION ===\n{record_text}\n"
+                "===========================================\n\n"
+                "Hãy trả lời bằng tiếng Việt, thân thiện và dễ hiểu."
+            )
+        elif is_prescription:
+            system_prompt = (
+                "Bạn là trợ lý sức khỏe AI thân thiện, hỗ trợ Bệnh nhân tra cứu thông tin về đơn thuốc của họ.\n"
+                "Giải thích tên thuốc, công dụng, cách uống, tác dụng phụ thường gặp bằng ngôn ngữ đơn giản.\n"
+                "Tuyệt đối không khuyên bệnh nhân tự thay đổi liều lượng mà không có ý kiến bác sĩ.\n"
+                "Cuối câu trả lời nhắc bệnh nhân tham vấn bác sĩ khi đưa ra quyết định y tế.\n\n"
+                f"=== NỘI DUNG ĐƠN THUỐC ===\n{record_text}\n"
+                "===========================\n\n"
+                "Hãy trả lời bằng tiếng Việt, thân thiện và dễ hiểu."
+            )
+        else:
+            system_prompt = (
+                "Bạn là một trợ lý sức khỏe AI thân thiện và chuyên nghiệp, hỗ trợ Bệnh nhân đọc hiểu hồ sơ bệnh án của chính họ.\n"
+                "Hãy giải thích các thuật ngữ chuyên môn phức tạp bằng ngôn ngữ giản dị, dễ hiểu, tránh gây hoang mang cho người bệnh.\n"
+                "Hướng dẫn bệnh nhân về chế độ dinh dưỡng, lối sống lành mạnh nếu phù hợp.\n"
+                "Cuối câu trả lời nhắc bệnh nhân tham vấn bác sĩ khi đưa ra quyết định y tế.\n\n"
+                f"=== NỘI DUNG HỒ SƠ SỨC KHỎE ===\n{record_text}\n"
+                "=================================\n\n"
+                "Hãy trả lời bằng tiếng Việt."
+            )
+
 
     # 5. Call Groq
     if not settings.GROQ_API_KEY:

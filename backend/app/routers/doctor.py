@@ -264,7 +264,7 @@ def call_groq_vision(image_bytes: bytes, mime_type: str, api_key: str) -> dict:
     image_url = f"data:{mime_type};base64,{base64_image}"
     
     payload = {
-        "model": "llama-3.2-11b-vision-preview",
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
         "response_format": {"type": "json_object"},
         "messages": [
             {
